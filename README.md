@@ -13,6 +13,7 @@
 - 🔐 Senhas armazenadas como hash SHA-256 (apenas proteção básica)
 - ✅ Interface limpa, responsiva e sem anúncios
 - ✅ Exportação de dados em CSV
+- ✅ Importação de dados via CSV
 
 ---
 
@@ -46,6 +47,12 @@ considerado uma criptografia forte.
    ```
 
 3. Abra o arquivo `index.html` diretamente no navegador.
+
+### Restaurar dados de um CSV
+
+1. No menu **Configurações**, clique em **Importar CSV**.
+2. Selecione o arquivo exportado anteriormente.
+3. As transações serão carregadas imediatamente no histórico.
 
 ---
 
