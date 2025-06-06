@@ -53,7 +53,7 @@
         // --- APPLICATION STATE ---
         const AppState = {
             user: null,
-            view: 'auth', // 'auth', 'dashboard', 'transactions', 'budgets', 'settings'
+            view: 'auth', // 'auth', 'dashboard', 'transactions', 'recurring', 'budgets', 'settings'
             transactions: [],
             budgets: [],
             // Each recurring item should contain:
@@ -236,6 +236,7 @@
                     <nav class="md:w-24 bg-gray-800/50 backdrop-blur-sm p-2 flex md:flex-col justify-around md:justify-start md:space-y-4 order-last md:order-first border-t md:border-t-0 md:border-r border-gray-700">
                         ${navItem('dashboard', 'home', 'Início')}
                         ${navItem('transactions', 'receipt', 'Lançar')}
+                        ${navItem('recurring', 'repeat', 'Recorrências')}
                         ${navItem('budgets', 'piggy-bank', 'Orçamento')}
                         ${navItem('settings', 'settings', 'Ajustes')}
                         <div class="md:mt-auto">
