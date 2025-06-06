@@ -27,7 +27,7 @@
 
 1. Clone o repositório:
    ```bash
-   git clone https://github.com/<seu-usuario>/reis.git
+   git clone https://github.com/BrunoMNoronha/reis.git
    ```
 
 2. Acesse a pasta do projeto:
