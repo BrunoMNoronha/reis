@@ -1,6 +1,6 @@
-# 💸 Reis – Controle de Finanças Pessoais
+# 💸 Réis – Controle de Finança Pessoal
 
-**Reis** é um aplicativo simples, leve e 100% offline para controle de finanças pessoais. Inspirado na primeira moeda oficial do Brasil, ele oferece uma gestão moderna, minimalista e sem distrações — ideal para quem quer registrar seus gastos de forma prática e segura.
+**Réis** é um aplicativo simples, leve e 100% offline para controle de finanças pessoais. Inspirado na primeira moeda oficial do Brasil, ele oferece uma gestão moderna, minimalista e sem distrações — ideal para quem quer registrar seus gastos de forma prática e segura.
 
 ---
 
