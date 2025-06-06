@@ -1,3 +1,11 @@
+// Importações dos módulos
+import { navigateToView, openSidebarMobile, closeSidebarMobile } from './ui.js';
+import { saveExpenses, loadExpenses, saveFixedExpenses, loadFixedExpenses, saveTheme, loadTheme } from './storage.js';
+import { renderExpenses, renderFixedExpenses } from './render.js';
+import { renderSummary, renderChart } from './summary.js';
+import { showModal, hideModal } from './modal.js';
+import { setupRecognition } from './voice.js';
+
 document.addEventListener('DOMContentLoaded', () => {
     // === Seletores de DOM ===
     const themeToggleBtn = document.getElementById('theme-toggle-btn');
