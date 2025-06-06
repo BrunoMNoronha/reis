@@ -57,7 +57,7 @@
 
 ## 📜 Licença
 
-Distribuído sob a licença **MIT**.  
+Distribuído sob a licença [MIT](LICENSE).
 Sinta-se livre para usar, editar e compartilhar! 🤝
 
 ---
