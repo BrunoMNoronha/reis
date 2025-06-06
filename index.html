@@ -3,7 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Meu R$1 - Controle de Gastos</title>
+    <title>Reis - Controle Financeiro</title>
+    <!-- Adicionada a biblioteca Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         /* === Reset & Variáveis === */
         :root {
@@ -11,6 +13,7 @@
             --color-primary-hover: #059669; /* emerald-600 */
             --color-secondary: #3b82f6; /* blue-500 */
             --color-danger: #ef4444; /* red-500 */
+            --color-danger-hover: #dc2626; /* red-600 */
             --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 
             /* Light Theme */
@@ -90,12 +93,19 @@
             color: white;
         }
 
+        .btn:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+        }
+
         .btn svg {
             margin-right: 0.5rem;
         }
 
         .btn-primary { background-color: var(--color-primary); }
         .btn-primary:hover { background-color: var(--color-primary-hover); }
+        .btn-danger { background-color: var(--color-danger); }
+        .btn-danger:hover { background-color: var(--color-danger-hover); }
         
         #theme-toggle-btn {
             background: none;
@@ -113,7 +123,21 @@
         .action-buttons {
             display: flex;
             gap: 1rem;
-            margin-bottom: 2rem;
+            margin-bottom: 1rem;
+        }
+
+        /* === Feedback do Microfone === */
+        .mic-feedback {
+            text-align: center;
+            margin-bottom: 1.5rem;
+            color: var(--text-muted-color);
+            font-size: 0.9rem;
+            height: 1.2rem;
+            transition: color 0.3s;
+        }
+
+        #add-expense-mic-btn.is-listening {
+            background-color: var(--color-danger);
         }
         
         /* === Formulário Modal === */
@@ -233,6 +257,16 @@
         }
         
         .total-expenses { font-size: 1.5rem; font-weight: bold; }
+
+        /* Novo container para o gráfico */
+        .chart-container {
+            position: relative;
+            height: 300px;
+            width: 100%;
+            margin-top: 1.5rem;
+            margin-bottom: 1rem;
+        }
+
         .progress-bar-container {
             margin: 1.5rem 0;
             background-color: var(--bg-color);
@@ -280,9 +314,9 @@
 <body>
 
     <header class="container">
-        <div class="logo">Meu R$1</div>
+        <div class="logo">Reis</div>
         <button id="theme-toggle-btn" title="Alternar tema">
-            <!-- Ícone será inserido via JS -->
+            <!-- O ícone será inserido via JS -->
         </button>
     </header>
 
@@ -292,7 +326,12 @@
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>
                 Nova Despesa
             </button>
+            <button class="btn btn-secondary" id="add-expense-mic-btn" title="Adicionar despesa por voz">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="22"></line></svg>
+                Usar Voz
+            </button>
         </section>
+        <div id="mic-feedback" class="mic-feedback" style="display: none;"></div>
 
         <section class="view-toggle">
             <div class="tab active" data-view="list-view">Lista</div>
@@ -302,7 +341,7 @@
         <!-- Vista da Lista -->
         <section id="list-view" class="view active">
             <div id="expense-list-container">
-                <!-- Despesas serão inseridas aqui -->
+                <!-- As despesas serão inseridas aqui -->
                 <p class="no-expenses-message">Nenhuma despesa registada ainda.</p>
             </div>
         </section>
@@ -320,8 +359,13 @@
                         Análise Inteligente
                     </button>
                 </div>
+                <!-- Novo: Container para o gráfico -->
+                <div class="chart-container">
+                    <canvas id="expense-chart"></canvas>
+                </div>
+                <hr style="border: none; border-top: 1px solid var(--border-color); margin: 1rem 0;">
                 <div id="summary-by-category">
-                    <!-- Resumo por categoria será inserido aqui -->
+                    <!-- O resumo por categoria será inserido aqui -->
                 </div>
             </div>
             <div id="analysis-container" class="analysis-card" style="display: none;">
@@ -333,7 +377,7 @@
     </main>
 
     <footer class="container">
-        <p>&copy; 2024 Meu R$1. Simples, direto e local.</p>
+        <p>&copy; 2024 Reis. Simples, direto e local.</p>
     </footer>
 
     <!-- Template para itens da lista de despesas -->
@@ -393,12 +437,26 @@
         </div>
     </div>
 
+    <!-- Novo: Modal de Confirmação -->
+    <div id="confirm-modal" class="modal">
+        <div class="modal-content" style="max-width: 400px;">
+            <h2 id="confirm-title">Confirmar Exclusão</h2>
+            <p id="confirm-message" style="margin: 1.5rem 0;">Tem a certeza de que deseja excluir esta despesa? Esta ação não pode ser desfeita.</p>
+            <div class="form-buttons">
+                <button id="confirm-ok-btn" class="btn btn-danger">Excluir</button>
+                <button id="confirm-cancel-btn" class="btn btn-secondary">Cancelar</button>
+            </div>
+        </div>
+    </div>
+
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             // === Seletores de DOM ===
             const themeToggleBtn = document.getElementById('theme-toggle-btn');
             const addExpenseBtn = document.getElementById('add-expense-btn');
+            const addExpenseMicBtn = document.getElementById('add-expense-mic-btn');
+            const micFeedback = document.getElementById('mic-feedback');
             const expenseModal = document.getElementById('expense-modal');
             const cancelBtn = document.getElementById('cancel-btn');
             const expenseForm = document.getElementById('expense-form');
@@ -412,27 +470,40 @@
             const analyzeBtn = document.getElementById('analyze-btn');
             const analysisContainer = document.getElementById('analysis-container');
             const analysisContent = document.getElementById('analysis-content');
+            const confirmModal = document.getElementById('confirm-modal');
+            const confirmOkBtn = document.getElementById('confirm-ok-btn');
+            const confirmCancelBtn = document.getElementById('confirm-cancel-btn');
 
             // === Estado da Aplicação ===
             let expenses = [];
             let currentTheme = 'light';
+            let expenseChart = null; // Guarda a instância do gráfico
+            let confirmCallback = null; // Guarda a ação a ser confirmada
+
+            // === API de Reconhecimento de Voz ===
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            const isRecognitionAvailable = SpeechRecognition ? true : false;
+            let recognition;
+
+            if (isRecognitionAvailable) {
+                recognition = new SpeechRecognition();
+                recognition.lang = 'pt-BR';
+                recognition.interimResults = false;
+                recognition.maxAlternatives = 1;
+            } else {
+                addExpenseMicBtn.style.display = 'none'; // Esconde o botão se a API não for suportada
+            }
 
             // === Funções de Persistência ===
-            const saveExpenses = () => {
-                localStorage.setItem('meuR1_expenses_html', JSON.stringify(expenses));
-            };
+            const saveExpenses = () => localStorage.setItem('reis_expenses', JSON.stringify(expenses));
             const loadExpenses = () => {
-                const storedExpenses = localStorage.getItem('meuR1_expenses_html');
+                const storedExpenses = localStorage.getItem('reis_expenses');
                 expenses = storedExpenses ? JSON.parse(storedExpenses) : [];
             };
-            const saveTheme = () => {
-                localStorage.setItem('meuR1_theme_html', currentTheme);
-            };
+            const saveTheme = () => localStorage.setItem('reis_theme', currentTheme);
             const loadTheme = () => {
-                const storedTheme = localStorage.getItem('meuR1_theme_html');
-                if (storedTheme) {
-                    setTheme(storedTheme);
-                }
+                const storedTheme = localStorage.getItem('reis_theme') || 'light';
+                setTheme(storedTheme);
             };
 
             // === Funções de Renderização ===
@@ -445,7 +516,7 @@
                 }
 
                 noExpensesMessage.style.display = 'none';
-                expenses.sort((a,b) => new Date(b.date) - new Date(a.date)); // Ordena mais recentes primeiro
+                expenses.sort((a, b) => new Date(b.date) - new Date(a.date));
 
                 expenses.forEach(expense => {
                     const templateClone = expenseItemTemplate.content.cloneNode(true);
@@ -463,9 +534,7 @@
                         observationEl.style.display = 'none';
                     }
 
-                    templateClone.querySelector('.delete-btn').addEventListener('click', () => {
-                        deleteExpense(expense.id);
-                    });
+                    templateClone.querySelector('.delete-btn').addEventListener('click', () => deleteExpense(expense.id));
                     
                     expenseListContainer.appendChild(templateClone);
                 });
@@ -474,51 +543,83 @@
             const renderSummary = () => {
                 const today = new Date();
                 const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-                const monthlyExpenses = expenses.filter(exp => new Date(exp.date) >= firstDayOfMonth);
-
+                const monthlyExpenses = expenses.filter(exp => new Date(exp.date + 'T00:00:00-03:00') >= firstDayOfMonth);
                 const total = monthlyExpenses.reduce((sum, exp) => sum + parseFloat(exp.value), 0);
                 summaryTotalEl.textContent = `R$ ${total.toFixed(2).replace('.', ',')}`;
-
                 const byCategory = monthlyExpenses.reduce((acc, exp) => {
                     acc[exp.category] = (acc[exp.category] || 0) + parseFloat(exp.value);
                     return acc;
                 }, {});
                 
                 summaryByCategoryEl.innerHTML = '';
-                
-                const sortedCategories = Object.entries(byCategory).sort(([,a],[,b]) => b - a);
+                const sortedCategories = Object.entries(byCategory).sort(([, a], [, b]) => b - a);
+
+                if(sortedCategories.length > 0) {
+                    const listTitle = document.createElement('h3');
+                    listTitle.textContent = 'Gastos por Categoria';
+                    listTitle.style.marginBottom = '1rem';
+                    summaryByCategoryEl.appendChild(listTitle);
+                }
 
                 sortedCategories.forEach(([category, value]) => {
                     const percentage = total > 0 ? (value / total) * 100 : 0;
                     const categoryDiv = document.createElement('div');
-                    categoryDiv.innerHTML = `
-                        <div class="category-item">
-                            <span>${category}</span>
-                            <strong>R$ ${value.toFixed(2).replace('.', ',')}</strong>
-                        </div>
-                        <div class="progress-bar-container">
-                            <div class="progress-bar" style="width: ${percentage}%;"></div>
-                        </div>
-                    `;
+                    categoryDiv.innerHTML = `<div class="category-item"><span>${category}</span><strong>R$ ${value.toFixed(2).replace('.', ',')}</strong></div><div class="progress-bar-container"><div class="progress-bar" style="width: ${percentage}%;"></div></div>`;
                     summaryByCategoryEl.appendChild(categoryDiv);
                 });
 
+                renderChart(byCategory);
                 analyzeBtn.disabled = monthlyExpenses.length === 0;
+            };
+
+            const renderChart = (dataByCategory) => {
+                const chartContainer = document.querySelector('.chart-container');
+                const ctx = document.getElementById('expense-chart').getContext('2d');
+                const labels = Object.keys(dataByCategory);
+                const data = Object.values(dataByCategory);
+
+                if (expenseChart) expenseChart.destroy();
+                
+                if (labels.length === 0) {
+                    chartContainer.style.display = 'none';
+                    return;
+                }
+                chartContainer.style.display = 'block';
+
+                expenseChart = new Chart(ctx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: 'Despesas do Mês',
+                            data: data,
+                            backgroundColor: ['#10b981', '#3b82f6', '#ef4444', '#f97316', '#8b5cf6', '#ec4899', '#6b7280', '#facc15'],
+                            borderColor: currentTheme === 'dark' ? '#1f2937' : '#ffffff',
+                            borderWidth: 3,
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        cutout: '70%',
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: { callbacks: { label: (context) => ` ${context.label}: ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(context.parsed)}` } }
+                        }
+                    }
+                });
             };
 
             // === Funções de Lógica ===
             const setTheme = (theme) => {
                 currentTheme = theme;
                 document.documentElement.className = theme === 'dark' ? 'dark-theme' : '';
-                themeToggleBtn.innerHTML = theme === 'dark' 
-                    ? `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>` // Moon
-                    : `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>`; // Sun
+                themeToggleBtn.innerHTML = theme === 'dark' ? `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>` : `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>`;
                 saveTheme();
+                renderSummary();
             };
 
-            const toggleTheme = () => {
-                setTheme(currentTheme === 'light' ? 'dark' : 'light');
-            };
+            const toggleTheme = () => setTheme(currentTheme === 'light' ? 'dark' : 'light');
 
             const showModal = () => {
                 expenseForm.reset();
@@ -526,10 +627,17 @@
                 document.getElementById('expense-id').value = '';
                 document.getElementById('modal-title').textContent = 'Nova Despesa';
                 expenseModal.style.display = 'flex';
+                document.getElementById('value').focus();
             };
+            const hideModal = () => expenseModal.style.display = 'none';
 
-            const hideModal = () => {
-                expenseModal.style.display = 'none';
+            const showConfirm = (callback) => {
+                confirmCallback = callback;
+                confirmModal.style.display = 'flex';
+            };
+            const hideConfirm = () => {
+                confirmCallback = null;
+                confirmModal.style.display = 'none';
             };
 
             const addOrUpdateExpense = (e) => {
@@ -538,17 +646,13 @@
                     value: document.getElementById('value').value,
                     category: document.getElementById('category').value,
                     date: document.getElementById('date').value,
-                    observation: document.getElementById('observation').value,
+                    observation: document.getElementById('observation').value.trim(),
                     id: document.getElementById('expense-id').value || Date.now().toString(),
                 };
                 
                 const existingIndex = expenses.findIndex(exp => exp.id === expenseData.id);
-
-                if (existingIndex > -1) {
-                    expenses[existingIndex] = expenseData;
-                } else {
-                    expenses.push(expenseData);
-                }
+                if (existingIndex > -1) expenses[existingIndex] = expenseData;
+                else expenses.push(expenseData);
 
                 saveExpenses();
                 renderAll();
@@ -556,77 +660,83 @@
             };
             
             const deleteExpense = (id) => {
-                if(confirm('Tem a certeza de que deseja excluir esta despesa?')){
+                showConfirm(() => {
                     expenses = expenses.filter(exp => exp.id !== id);
                     saveExpenses();
                     renderAll();
-                }
+                });
             };
             
             const switchView = (viewId) => {
                 views.forEach(view => view.classList.remove('active'));
                 tabs.forEach(tab => tab.classList.remove('active'));
-                
                 document.getElementById(viewId).classList.add('active');
                 document.querySelector(`.tab[data-view="${viewId}"]`).classList.add('active');
             };
-            
-            // === Análise Inteligente com Gemini API ===
-            const getExpenseAnalysis = async () => {
-                const today = new Date();
-                const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-                const monthlyExpenses = expenses.filter(exp => new Date(exp.date) >= firstDayOfMonth);
 
-                if (monthlyExpenses.length === 0) {
-                    analysisContent.textContent = "Não há despesas suficientes este mês para uma análise.";
-                    analysisContainer.style.display = 'block';
-                    return;
-                }
+            // === Lógica de Reconhecimento de Voz ===
+            const handleVoiceCommand = () => {
+                if (!isRecognitionAvailable) return;
+                micFeedback.textContent = "Ouvindo... por favor, fale o comando.";
+                micFeedback.style.color = 'var(--text-muted-color)';
+                micFeedback.style.display = 'block';
+                addExpenseMicBtn.classList.add('is-listening');
+                addExpenseMicBtn.disabled = true;
+                recognition.start();
+            };
 
-                analysisContent.innerHTML = `<span class="loading-spinner"></span> A analisar os seus gastos...`;
-                analysisContainer.style.display = 'block';
-                analyzeBtn.disabled = true;
+            const parseAndFillForm = (transcript) => {
+                const regex = /(?:lançar|gastei|registrar|anotar)\s+(\d+(?:[.,]\d+)?)\s*(?:reais|real)?\s+em\s+([a-zA-ZáàâãéèêíïóôõöúçñÁÀÂÃÉÈÊÍÏÓÔÕÖÚÇÑ]+)(?:\s+para\s+(.+))?/i;
+                const match = transcript.match(regex);
 
-                const byCategory = monthlyExpenses.reduce((acc, exp) => {
-                    acc[exp.category] = (acc[exp.category] || 0) + parseFloat(exp.value);
-                    return acc;
-                }, {});
-                
-                let promptData = "Estas são as minhas despesas totais por categoria para o mês atual (em Reais Brasileiros):\n";
-                for (const category in byCategory) {
-                    promptData += `- ${category}: R$ ${byCategory[category].toFixed(2)}\n`;
-                }
-                const totalExpenses = monthlyExpenses.reduce((sum, exp) => sum + parseFloat(exp.value), 0);
-                promptData += `\nTotal de Despesas do Mês: R$ ${totalExpenses.toFixed(2)}\n\n`;
-                promptData += "Forneça uma breve análise (2-4 frases) dos meus hábitos de consumo este mês, destacando as categorias mais significativas. Ofereça uma ou duas sugestões concisas e práticas para otimizar os meus gastos. Seja amigável e direto. Use a moeda Real Brasileiro (R$) quando mencionar valores.";
-
-                const payload = { contents: [{ role: "user", parts: [{ text: promptData }] }] };
-                const apiKey = ""; // Será fornecido pelo ambiente Canvas
-                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
-                
-                try {
-                    const response = await fetch(apiUrl, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(payload)
-                    });
-                    if (!response.ok) throw new Error(`Erro na API: ${response.statusText}`);
+                if (match) {
+                    const value = match[1].replace(',', '.');
+                    const category = match[2].toLowerCase();
+                    const observation = match[3] || '';
+                    const categoryOptions = Array.from(document.querySelectorAll('#category option'));
+                    const foundOption = categoryOptions.find(opt => opt.value.toLowerCase() === category);
                     
-                    const result = await response.json();
-                    const text = result.candidates[0].content.parts[0].text;
-                    analysisContent.textContent = text;
-                } catch (error) {
-                    console.error("Erro na API Gemini:", error);
-                    analysisContent.textContent = `Ocorreu um erro ao obter a análise. Tente novamente mais tarde. (${error.message})`;
-                } finally {
-                    analyzeBtn.disabled = false;
+                    if (foundOption) {
+                        showModal();
+                        document.getElementById('value').value = value;
+                        document.getElementById('category').value = foundOption.value;
+                        document.getElementById('observation').value = observation.trim();
+                        micFeedback.textContent = "Comando reconhecido! Conclua e salve.";
+                        micFeedback.style.color = 'var(--color-primary)';
+                    } else {
+                        micFeedback.textContent = `Categoria "${match[2]}" não foi encontrada.`;
+                        micFeedback.style.color = 'var(--color-danger)';
+                    }
+                } else {
+                    micFeedback.textContent = "Não entendi o comando. Ex: 'lançar 50 reais em Lazer para cinema'";
+                    micFeedback.style.color = 'var(--color-danger)';
                 }
             };
+
+            if(isRecognitionAvailable){
+                recognition.onresult = (event) => {
+                    const transcript = event.results[0][0].transcript;
+                    parseAndFillForm(transcript);
+                };
+                recognition.onerror = (event) => {
+                    let errorMessage = 'Ocorreu um erro no reconhecimento.';
+                    if (event.error === 'no-speech') errorMessage = 'Não ouvi nada. Tente novamente.';
+                    else if (event.error === 'not-allowed') errorMessage = 'A permissão para o microfone foi negada.';
+                    micFeedback.textContent = errorMessage;
+                    micFeedback.style.color = 'var(--color-danger)';
+                };
+                recognition.onend = () => {
+                    addExpenseMicBtn.classList.remove('is-listening');
+                    addExpenseMicBtn.disabled = false;
+                    setTimeout(() => { if(micFeedback) micFeedback.style.display = 'none'; }, 5000);
+                };
+            }
             
             // === Inicialização ===
             const renderAll = () => {
                 renderExpenses();
                 renderSummary();
+                analysisContainer.style.display = 'none';
             };
 
             const init = () => {
@@ -634,20 +744,25 @@
                 loadExpenses();
                 renderAll();
 
+                // Listeners de eventos
                 themeToggleBtn.addEventListener('click', toggleTheme);
                 addExpenseBtn.addEventListener('click', showModal);
                 cancelBtn.addEventListener('click', hideModal);
                 expenseForm.addEventListener('submit', addOrUpdateExpense);
-                analyzeBtn.addEventListener('click', getExpenseAnalysis);
-
-                tabs.forEach(tab => {
-                    tab.addEventListener('click', () => switchView(tab.dataset.view));
+                analyzeBtn.addEventListener('click', () => { /* Implementação futura */ });
+                if(isRecognitionAvailable) addExpenseMicBtn.addEventListener('click', handleVoiceCommand);
+                
+                confirmOkBtn.addEventListener('click', () => {
+                    if (confirmCallback) confirmCallback();
+                    hideConfirm();
                 });
+                confirmCancelBtn.addEventListener('click', hideConfirm);
+
+                tabs.forEach(tab => tab.addEventListener('click', () => switchView(tab.dataset.view)));
                 
                 window.addEventListener('click', (e) => {
-                    if (e.target === expenseModal) {
-                        hideModal();
-                    }
+                    if (e.target === expenseModal) hideModal();
+                    if (e.target === confirmModal) hideConfirm();
                 });
             };
 
