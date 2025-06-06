@@ -73,6 +73,12 @@
             }
         };
 
+        const hashPassword = async (password) => {
+            const data = new TextEncoder().encode(password);
+            const digest = await crypto.subtle.digest('SHA-256', data);
+            return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join('');
+        };
+
         // --- DATA PROVIDER (LocalStorage Abstraction) ---
         const DataProvider = {
             getUser: (username) => JSON.parse(localStorage.getItem(`reis_user_${username}`)),
@@ -564,7 +570,7 @@
                          if (DataProvider.getUser(username)) { root.innerHTML = renderAuthPage(true, 'Este nome de usuário já existe.'); lucide.createIcons(); return; }
                          try {
                             const cred = await navigator.credentials.create({ publicKey: { challenge: new Uint8Array(32), rp: { name: "Reis App", id: window.location.hostname }, user: { id: new Uint8Array(16), name: username, displayName: username }, pubKeyCredParams: [{ type: "public-key", alg: -7 }], authenticatorSelection: { authenticatorAttachment: "platform", userVerification: "required" } } });
-                            const newUser = { id: crypto.randomUUID(), username, password: null, credentials: [{ id: base64url.encode(cred.rawId), publicKey: base64url.encode(cred.response.getPublicKey()), algorithm: -7 }] };
+                            const newUser = { id: crypto.randomUUID(), username, passwordHash: null, credentials: [{ id: base64url.encode(cred.rawId), publicKey: base64url.encode(cred.response.getPublicKey()), algorithm: -7 }] };
                             DataProvider.saveUser(newUser); login(newUser);
                          } catch (err) { root.innerHTML = renderAuthPage(true, "Falha no registro biométrico."); lucide.createIcons(); }
                     } else {
@@ -614,7 +620,7 @@
 
             };
 
-            root.onsubmit = (e) => {
+            root.onsubmit = async (e) => {
                 e.preventDefault();
                 const form = e.target;
                 
@@ -623,14 +629,16 @@
                     const username = form.username.value;
                     const password = form.password.value;
                     if (!username || !password) { root.innerHTML = renderAuthPage(isRegistering, 'Usuário e senha são obrigatórios.'); lucide.createIcons(); return; }
-                    
+
+                    const passwordHash = await hashPassword(password);
+
                     if(isRegistering) {
                         if (DataProvider.getUser(username)) { root.innerHTML = renderAuthPage(true, 'Este nome de usuário já existe.'); lucide.createIcons(); return; }
-                        const newUser = { id: crypto.randomUUID(), username, password, credentials: [] };
+                        const newUser = { id: crypto.randomUUID(), username, passwordHash, credentials: [] };
                         DataProvider.saveUser(newUser); login(newUser);
                     } else {
                         const user = DataProvider.getUser(username);
-                        if(user && user.password === password) login(user);
+                        if(user && user.passwordHash === passwordHash) login(user);
                         else { root.innerHTML = renderAuthPage(false, 'Usuário ou senha inválidos.'); lucide.createIcons(); }
                     }
                 }
