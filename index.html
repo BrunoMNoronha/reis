@@ -4,27 +4,200 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Reis - Controle Financeiro</title>
-    <!-- Adicionada a biblioteca Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <link rel="stylesheet" href="css/style.css">
+    <style>
+        /* === Reset & Variáveis === */
+        :root {
+            --color-primary: #10b981; /* emerald-500 */
+            --color-primary-hover: #059669; /* emerald-600 */
+            --color-secondary: #3b82f6; /* blue-500 */
+            --color-danger: #ef4444; /* red-500 */
+            --color-danger-hover: #dc2626; /* red-600 */
+            --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+
+            /* Light Theme */
+            --bg-color: #f3f4f6; /* gray-100 */
+            --card-bg-color: #ffffff;
+            --text-color: #1f2937; /* gray-800 */
+            --text-muted-color: #6b7280; /* gray-500 */
+            --border-color: #e5e7eb; /* gray-200 */
+        }
+
+        .dark-theme {
+            --bg-color: #111827; /* gray-900 */
+            --card-bg-color: #1f2937; /* gray-800 */
+            --text-color: #f9fafb; /* gray-50 */
+            --text-muted-color: #9ca3af; /* gray-400 */
+            --border-color: #374151; /* gray-700 */
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html { scroll-behavior: smooth; }
+        body {
+            font-family: var(--font-sans);
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            transition: background-color 0.3s, color 0.3s;
+            line-height: 1.6;
+        }
+
+        /* === Estrutura Principal === */
+        .container { max-width: 800px; margin: 0 auto; padding: 1rem; }
+        main { padding-bottom: 8rem; }
+        header { padding: 1rem 0; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); }
+        .logo { font-size: 1.8rem; font-weight: bold; color: var(--color-primary); }
+        
+        /* NOVO: Footer fixo e discreto */
+        footer {
+            position: fixed;
+            left: 0;
+            bottom: 0;
+            width: 100%;
+            padding: 0.5rem;
+            text-align: center;
+            font-size: 0.8rem;
+            color: var(--text-muted-color);
+            background-color: var(--bg-color);
+            border-top: 1px solid var(--border-color);
+            z-index: 998;
+            transition: background-color 0.3s, border-color 0.3s;
+        }
+
+        /* === Componentes e UI === */
+        .btn {
+            display: inline-flex; align-items: center; justify-content: center;
+            padding: 0.75rem 1.25rem; border: none; border-radius: 0.5rem;
+            font-size: 1rem; font-weight: 600; cursor: pointer;
+            transition: background-color 0.2s, box-shadow 0.2s;
+            text-decoration: none; color: white;
+        }
+        .btn:disabled { opacity: 0.7; cursor: not-allowed; }
+        .btn svg { margin-right: 0.5rem; }
+        .btn-primary { background-color: var(--color-primary); }
+        .btn-primary:hover:not(:disabled) { background-color: var(--color-primary-hover); }
+        .btn-danger { background-color: var(--color-danger); }
+        .btn-danger:hover { background-color: var(--color-danger-hover); }
+        .btn-secondary { background-color: #6b7280; }
+        .btn-secondary:hover { background-color: #4b5563; }
+        
+        #theme-toggle-btn {
+            background: none; border: 1px solid var(--border-color);
+            border-radius: 50%; width: 40px; height: 40px;
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; color: var(--text-muted-color);
+        }
+        
+        .action-buttons { display: flex; flex-wrap: wrap; gap: 1rem; margin-bottom: 1rem; }
+        .mic-feedback { margin-bottom: 1.5rem; color: var(--text-muted-color); font-size: 0.9rem; height: 1.2rem; transition: color 0.3s; }
+        #add-expense-mic-btn.is-listening { background-color: var(--color-danger); }
+        
+        .modal {
+            display: none; position: fixed; z-index: 1000;
+            left: 0; top: 0; width: 100%; height: 100%;
+            overflow: auto; background-color: rgba(0,0,0,0.6);
+            align-items: center; justify-content: center;
+        }
+        .modal-content {
+            background-color: var(--card-bg-color); margin: auto; padding: 2rem;
+            border: 1px solid var(--border-color); width: 90%; max-width: 500px;
+            border-radius: 0.75rem; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04);
+        }
+        
+        .form-group { margin-bottom: 1rem; }
+        .form-group label { display: block; margin-bottom: 0.5rem; font-weight: 500; }
+        .form-group input, .form-group select {
+            width: 100%; padding: 0.75rem; border: 1px solid var(--border-color);
+            border-radius: 0.5rem; background-color: var(--bg-color);
+            color: var(--text-color); font-size: 1rem;
+        }
+        .form-buttons { display: flex; gap: 1rem; margin-top: 1.5rem; }
+        .form-buttons .btn { flex: 1; }
+
+        .view-toggle { display: flex; border-bottom: 2px solid var(--border-color); margin-bottom: 1.5rem; }
+        .view-toggle .tab {
+            padding: 0.75rem 1.5rem; cursor: pointer;
+            border-bottom: 3px solid transparent; margin-bottom: -2px;
+            font-weight: 500; color: var(--text-muted-color);
+        }
+        .view-toggle .tab.active { color: var(--color-primary); border-color: var(--color-primary); }
+
+        .view { display: none; }
+        .view.active { display: block; }
+        
+        .expense-list-item, .fixed-expense-list-item {
+            background-color: var(--card-bg-color); border-radius: 0.5rem;
+            padding: 1rem 1.5rem; margin-bottom: 1rem; display: flex;
+            justify-content: space-between; align-items: center;
+            box-shadow: 0 1px 3px 0 rgba(0,0,0,0.1), 0 1px 2px 0 rgba(0,0,0,0.06);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .expense-list-item:hover, .fixed-expense-list-item:hover { transform: translateY(-2px); box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06); }
+        .expense-info .value, .fixed-expense-info .value { font-size: 1.25rem; font-weight: 600; color: var(--color-primary); }
+        .expense-info .category, .fixed-expense-info .category { font-weight: 500; }
+        .expense-info .date, .expense-info .observation, .fixed-expense-info .due-day { font-size: 0.8rem; color: var(--text-muted-color); }
+        
+        .expense-actions, .fixed-expense-actions { background: none; border: none; cursor: pointer; padding: 0.5rem; color: var(--text-muted-color); transition: color 0.2s; }
+        .expense-actions button:hover, .fixed-expense-actions button:hover { color: var(--color-danger); }
+        
+        .summary-card { background-color: var(--card-bg-color); border-radius: 0.75rem; padding: 1.5rem; box-shadow: 0 1px 3px 0 rgba(0,0,0,0.1), 0 1px 2px 0 rgba(0,0,0,0.06); }
+        .summary-header { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1rem; }
+        .total-expenses { font-size: 1.5rem; font-weight: bold; }
+        .chart-container { position: relative; height: 300px; width: 100%; margin-top: 1.5rem; margin-bottom: 1rem; }
+
+        /* === BOTÕES FLUTUANTES (FAB) === */
+        .fab-container {
+            position: fixed;
+            bottom: 4rem; /* Aumentado para não sobrepor o footer */
+            right: 1.5rem;
+            display: flex;
+            flex-direction: column-reverse; /* Expande para CIMA */
+            align-items: center;
+            gap: 1rem;
+            z-index: 999;
+        }
+
+        .fab {
+            width: 56px; height: 56px;
+            border-radius: 50%;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            display: flex; align-items: center; justify-content: center;
+            padding: 0;
+            transition: transform 0.3s cubic-bezier(0.18, 0.89, 0.32, 1.28), opacity 0.2s;
+        }
+        .fab svg { margin: 0; }
+
+        .fab-secondary {
+            transform: scale(0); /* Animação de expansão para cima */
+            opacity: 0;
+            transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s;
+        }
+
+        .fab-container.open .fab-main { transform: rotate(45deg); }
+        .fab-container.open .fab-secondary { transform: scale(1); opacity: 1; }
+
+        .fab-container { display: none; }
+        @media (max-width: 768px) {
+            .action-buttons { display: none; }
+            #fixed-view > .btn { display: none; }
+            .fab-container { display: flex; }
+        }
+    </style>
 </head>
 <body>
 
     <header class="container">
         <div class="logo">Reis</div>
-        <button id="theme-toggle-btn" title="Alternar tema">
-            <!-- O ícone será inserido via JS -->
-        </button>
+        <button id="theme-toggle-btn" title="Alternar tema"></button>
     </header>
 
     <main class="container">
         <section class="action-buttons">
             <button class="btn btn-primary" id="add-expense-btn">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>
                 Nova Despesa
             </button>
             <button class="btn btn-secondary" id="add-expense-mic-btn" title="Adicionar despesa por voz">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="22"></line></svg>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="22"></line></svg>
                 Usar Voz
             </button>
         </section>
@@ -33,17 +206,15 @@
         <section class="view-toggle">
             <div class="tab active" data-view="list-view">Lista</div>
             <div class="tab" data-view="summary-view">Resumo</div>
+            <div class="tab" data-view="fixed-view">Fixas</div>
         </section>
         
-        <!-- Vista da Lista -->
         <section id="list-view" class="view active">
             <div id="expense-list-container">
-                <!-- As despesas serão inseridas aqui -->
                 <p class="no-expenses-message">Nenhuma despesa registada ainda.</p>
             </div>
         </section>
         
-        <!-- Vista do Resumo -->
         <section id="summary-view" class="view">
              <div class="summary-card">
                 <div class="summary-header">
@@ -51,102 +222,342 @@
                         <h2>Resumo do Mês</h2>
                         <p class="total-expenses" id="summary-total">R$ 0,00</p>
                     </div>
-                    <button class="btn btn-primary" id="analyze-btn">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/><path d="m12 10-2 2 2 2m-2-2h6"/></svg>
-                        Análise Inteligente
-                    </button>
                 </div>
-                <!-- Novo: Container para o gráfico -->
                 <div class="chart-container">
                     <canvas id="expense-chart"></canvas>
                 </div>
-                <hr style="border: none; border-top: 1px solid var(--border-color); margin: 1rem 0;">
-                <div id="summary-by-category">
-                    <!-- O resumo por categoria será inserido aqui -->
-                </div>
-            </div>
-            <div id="analysis-container" class="analysis-card" style="display: none;">
-                <h3>✨ Análise Inteligente de Despesas</h3>
-                <div id="analysis-content" class="content"></div>
             </div>
         </section>
-        
+
+        <section id="fixed-view" class="view">
+            <button class="btn btn-primary" id="add-fixed-expense-btn" style="margin-bottom: 1.5rem;">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>
+                Nova Despesa Fixa
+            </button>
+            <div id="fixed-expense-list-container">
+                 <p class="no-fixed-expenses-message">Nenhuma despesa fixa registada.</p>
+            </div>
+        </section>
     </main>
 
-    <footer class="container">
-        <p>&copy; 2024 Reis. Simples, direto e local.</p>
-    </footer>
+    <!-- BOTÕES FLUTUANTES (FAB) -->
+    <div id="fab-container" class="fab-container">
+        <!-- Botões secundários (aparecem quando o menu abre) -->
+        <button id="fab-add-mic-btn" class="btn btn-secondary fab fab-secondary" title="Adicionar por Voz">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="22"></line></svg>
+        </button>
+        <button id="fab-add-manual-btn" class="btn btn-secondary fab fab-secondary" title="Nova Despesa">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+        </button>
+         <button id="fab-add-fixed-btn" class="btn btn-secondary fab fab-secondary" title="Nova Despesa Fixa">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 7V5c0-1.1.9-2 2-2h4c1.1 0 2 .9 2 2v2"></path><path d="M12 22H8.4c-1.1 0-2-.9-2-2v-7c0-1.1.9-2 2-2h7.1c1.1 0 2 .9 2 2v1"></path><path d="M16 22h6"></path><path d="M19 19v6"></path></svg>
+        </button>
 
-    <!-- Template para itens da lista de despesas -->
-    <template id="expense-item-template">
-        <article class="expense-list-item">
-            <div class="expense-info">
-                <div class="value"></div>
-                <div class="category"></div>
-                <div class="date"></div>
-                <div class="observation"></div>
-            </div>
-            <div class="expense-actions">
-                <button class="delete-btn" title="Excluir despesa">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
-                </button>
-            </div>
-        </article>
-    </template>
+        <!-- Botão principal -->
+        <button id="fab-main-btn" class="btn btn-primary fab fab-main" title="Adicionar">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+        </button>
+    </div>
     
-    <!-- Modal para adicionar despesa -->
-    <div id="expense-modal" class="modal">
-        <div class="modal-content">
-            <h2 id="modal-title">Nova Despesa</h2>
-            <form id="expense-form">
-                <input type="hidden" id="expense-id">
-                <div class="form-group">
-                    <label for="value">Valor (R$)</label>
-                    <input type="number" id="value" step="0.01" placeholder="25,00" required>
-                </div>
-                <div class="form-group">
-                    <label for="category">Categoria</label>
-                    <select id="category" required>
-                        <option value="">Selecione uma categoria</option>
-                        <option>Alimentação</option>
-                        <option>Transporte</option>
-                        <option>Moradia</option>
-                        <option>Lazer</option>
-                        <option>Saúde</option>
-                        <option>Educação</option>
-                        <option>Compras</option>
-                        <option>Outros</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label for="date">Data</label>
-                    <input type="date" id="date" required>
-                </div>
-                <div class="form-group">
-                    <label for="observation">Observação (Opcional)</label>
-                    <input type="text" id="observation" placeholder="Ex: Almoço com cliente">
-                </div>
-                <div class="form-buttons">
-                    <button type="submit" class="btn btn-primary">Adicionar</button>
-                    <button type="button" class="btn btn-secondary" id="cancel-btn">Cancelar</button>
-                </div>
-            </form>
-        </div>
-    </div>
+    <!-- FOOTER FIXO -->
+    <footer>Reis &copy; 2024 &bull; v1.5</footer>
 
-    <!-- Novo: Modal de Confirmação -->
-    <div id="confirm-modal" class="modal">
-        <div class="modal-content" style="max-width: 400px;">
-            <h2 id="confirm-title">Confirmar Exclusão</h2>
-            <p id="confirm-message" style="margin: 1.5rem 0;">Tem a certeza de que deseja excluir esta despesa? Esta ação não pode ser desfeita.</p>
-            <div class="form-buttons">
-                <button id="confirm-ok-btn" class="btn btn-danger">Excluir</button>
-                <button id="confirm-cancel-btn" class="btn btn-secondary">Cancelar</button>
-            </div>
-        </div>
-    </div>
+    <!-- TEMPLATES E MODALS -->
+    <template id="expense-item-template"><article class="expense-list-item"><div class="expense-info"><div class="value"></div><div class="category"></div><div class="date"></div><div class="observation"></div></div><button class="delete-btn expense-actions" title="Excluir despesa"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button></article></template>
+    <template id="fixed-expense-item-template"><article class="fixed-expense-list-item"><div class="fixed-expense-info"><div class="value"></div><div class="category"></div><div class="due-day"></div></div><button class="delete-btn fixed-expense-actions" title="Excluir despesa fixa"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button></article></template>
+    <div id="expense-modal" class="modal"><div class="modal-content"><h2 id="modal-title">Nova Despesa</h2><form id="expense-form"><input type="hidden" id="expense-id"><div class="form-group"><label for="value">Valor (R$)</label><input type="number" id="value" step="0.01" placeholder="25,00" required></div><div class="form-group"><label for="category">Categoria</label><select id="category" required><option value="">Selecione...</option><option>Alimentação</option><option>Transporte</option><option>Moradia</option><option>Lazer</option><option>Saúde</option><option>Educação</option><option>Compras</option><option>Outros</option></select></div><div class="form-group"><label for="date">Data</label><input type="date" id="date" required></div><div class="form-group"><label for="observation">Observação (Opcional)</label><input type="text" id="observation" placeholder="Ex: Almoço com cliente"></div><div class="form-buttons"><button type="submit" class="btn btn-primary">Adicionar</button><button type="button" class="btn btn-secondary" id="cancel-btn">Cancelar</button></div></form></div></div>
+    <div id="fixed-expense-modal" class="modal"><div class="modal-content"><h2>Nova Despesa Fixa</h2><form id="fixed-expense-form"><div class="form-group"><label for="fixed-description">Descrição</label><input type="text" id="fixed-description" placeholder="Ex: Aluguel, Assinatura" required></div><div class="form-group"><label for="fixed-value">Valor (R$)</label><input type="number" id="fixed-value" step="0.01" placeholder="1500,00" required></div><div class="form-group"><label for="fixed-category">Categoria</label><select id="fixed-category" required><option value="">Selecione...</option><option>Moradia</option><option>Lazer</option><option>Educação</option><option>Transporte</option><option>Saúde</option><option>Outros</option></select></div><div class="form-group"><label for="fixed-due-day">Dia do Vencimento</label><input type="number" id="fixed-due-day" min="1" max="31" placeholder="5" required></div><div class="form-buttons"><button type="submit" class="btn btn-primary">Salvar</button><button type="button" class="btn btn-secondary" id="fixed-cancel-btn">Cancelar</button></div></form></div></div>
+    <div id="confirm-modal" class="modal"><div class="modal-content" style="max-width: 400px;"><h2 id="confirm-title">Confirmar Exclusão</h2><p id="confirm-message" style="margin: 1.5rem 0;">Tem certeza?</p><div class="form-buttons"><button id="confirm-ok-btn" class="btn btn-danger">Excluir</button><button id="confirm-cancel-btn" class="btn btn-secondary">Cancelar</button></div></div></div>
 
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // === Seletores de DOM ===
+            const themeToggleBtn = document.getElementById('theme-toggle-btn');
+            const addExpenseBtn = document.getElementById('add-expense-btn');
+            const addExpenseMicBtn = document.getElementById('add-expense-mic-btn');
+            const micFeedback = document.getElementById('mic-feedback');
+            const tabs = document.querySelectorAll('.view-toggle .tab');
+            const views = document.querySelectorAll('.view');
+            const expenseModal = document.getElementById('expense-modal');
+            const cancelBtn = document.getElementById('cancel-btn');
+            const expenseForm = document.getElementById('expense-form');
+            const expenseListContainer = document.getElementById('expense-list-container');
+            const noExpensesMessage = document.querySelector('.no-expenses-message');
+            const expenseItemTemplate = document.getElementById('expense-item-template');
+            const addFixedExpenseBtn = document.getElementById('add-fixed-expense-btn');
+            const fixedExpenseModal = document.getElementById('fixed-expense-modal');
+            const fixedCancelBtn = document.getElementById('fixed-cancel-btn');
+            const fixedExpenseForm = document.getElementById('fixed-expense-form');
+            const fixedExpenseListContainer = document.getElementById('fixed-expense-list-container');
+            const noFixedExpensesMessage = document.querySelector('.no-fixed-expenses-message');
+            const fixedExpenseItemTemplate = document.getElementById('fixed-expense-item-template');
+            const summaryTotalEl = document.getElementById('summary-total');
+            const confirmModal = document.getElementById('confirm-modal');
+            const confirmTitle = document.getElementById('confirm-title');
+            const confirmMessage = document.getElementById('confirm-message');
+            const confirmOkBtn = document.getElementById('confirm-ok-btn');
+            const confirmCancelBtn = document.getElementById('confirm-cancel-btn');
+            const fabContainer = document.getElementById('fab-container');
+            const fabMainBtn = document.getElementById('fab-main-btn');
+            const fabAddManualBtn = document.getElementById('fab-add-manual-btn');
+            const fabAddMicBtn = document.getElementById('fab-add-mic-btn');
+            const fabAddFixedBtn = document.getElementById('fab-add-fixed-btn');
 
-    <script src="js/app.js"></script>
+            let expenses = [], fixedExpenses = [], currentTheme = 'light', expenseChart = null, confirmCallback = null;
+
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            const isRecognitionAvailable = !!SpeechRecognition;
+            let recognition;
+
+            if (isRecognitionAvailable) {
+                recognition = new SpeechRecognition();
+                recognition.lang = 'pt-BR';
+                recognition.interimResults = false;
+            } else {
+                addExpenseMicBtn.style.display = 'none';
+                fabAddMicBtn.style.display = 'none';
+            }
+
+            const saveExpenses = () => localStorage.setItem('reis_expenses', JSON.stringify(expenses));
+            const loadExpenses = () => { expenses = JSON.parse(localStorage.getItem('reis_expenses')) || []; };
+            const saveFixedExpenses = () => localStorage.setItem('reis_fixed_expenses', JSON.stringify(fixedExpenses));
+            const loadFixedExpenses = () => { fixedExpenses = JSON.parse(localStorage.getItem('reis_fixed_expenses')) || []; };
+            const saveTheme = () => localStorage.setItem('reis_theme', currentTheme);
+            const loadTheme = () => { setTheme(localStorage.getItem('reis_theme') || 'light'); };
+
+            const renderExpenses = () => {
+                expenseListContainer.innerHTML = '';
+                if (expenses.length === 0) {
+                    expenseListContainer.appendChild(noExpensesMessage.cloneNode(true));
+                    return;
+                }
+                expenses.sort((a, b) => new Date(b.date) - new Date(a.date)).forEach(expense => {
+                    const clone = expenseItemTemplate.content.cloneNode(true);
+                    clone.querySelector('.expense-list-item').dataset.id = expense.id;
+                    clone.querySelector('.value').textContent = `R$ ${parseFloat(expense.value).toFixed(2).replace('.', ',')}`;
+                    clone.querySelector('.category').textContent = expense.category;
+                    clone.querySelector('.date').textContent = new Date(expense.date + 'T00:00:00-03:00').toLocaleDateString('pt-BR');
+                    const obsEl = clone.querySelector('.observation');
+                    obsEl.textContent = expense.observation || '';
+                    obsEl.style.display = expense.observation ? 'block' : 'none';
+                    clone.querySelector('.delete-btn').addEventListener('click', () => deleteExpense(expense.id));
+                    expenseListContainer.appendChild(clone);
+                });
+            };
+
+            const renderFixedExpenses = () => {
+                fixedExpenseListContainer.innerHTML = '';
+                if(fixedExpenses.length === 0){
+                    fixedExpenseListContainer.appendChild(noFixedExpensesMessage.cloneNode(true));
+                    return;
+                }
+                fixedExpenses.forEach(expense => {
+                    const clone = fixedExpenseItemTemplate.content.cloneNode(true);
+                    clone.querySelector('.fixed-expense-list-item').dataset.id = expense.id;
+                    clone.querySelector('.value').textContent = `R$ ${parseFloat(expense.value).toFixed(2).replace('.', ',')} - ${expense.description}`;
+                    clone.querySelector('.category').textContent = expense.category;
+                    clone.querySelector('.due-day').textContent = `Vence todo dia ${expense.dueDay}`;
+                    clone.querySelector('.delete-btn').addEventListener('click', () => deleteFixedExpense(expense.id));
+                    fixedExpenseListContainer.appendChild(clone);
+                });
+            };
+            
+            const renderSummary = () => {
+                const today = new Date();
+                const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+                const monthlyExpenses = expenses.filter(exp => new Date(exp.date + 'T00:00:00-03:00') >= firstDayOfMonth);
+                const total = monthlyExpenses.reduce((sum, exp) => sum + parseFloat(exp.value), 0);
+                summaryTotalEl.textContent = `R$ ${total.toFixed(2).replace('.', ',')}`;
+                const byCategory = monthlyExpenses.reduce((acc, exp) => {
+                    acc[exp.category] = (acc[exp.category] || 0) + parseFloat(exp.value);
+                    return acc;
+                }, {});
+                renderChart(byCategory);
+            };
+
+            const renderChart = (dataByCategory) => {
+                const chartContainer = document.querySelector('.chart-container');
+                const ctx = document.getElementById('expense-chart').getContext('2d');
+                const labels = Object.keys(dataByCategory);
+                const data = Object.values(dataByCategory);
+
+                if (expenseChart) expenseChart.destroy();
+                
+                chartContainer.style.display = labels.length === 0 ? 'none' : 'block';
+                if(labels.length === 0) return;
+
+                expenseChart = new Chart(ctx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            data: data,
+                            backgroundColor: ['#10b981', '#3b82f6', '#ef4444', '#f97316', '#8b5cf6', '#ec4899', '#6b7280', '#facc15'],
+                            borderColor: currentTheme === 'dark' ? '#1f2937' : '#ffffff',
+                            borderWidth: 3,
+                        }]
+                    },
+                    options: {
+                        responsive: true, maintainAspectRatio: false, cutout: '70%',
+                        plugins: {
+                            legend: { display: true, position: 'bottom', labels: { color: getComputedStyle(document.body).getPropertyValue('--text-color') } },
+                            tooltip: { callbacks: { label: (c) => ` ${c.label}: ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(c.parsed)}` } }
+                        }
+                    }
+                });
+            };
+
+            const setTheme = (theme) => {
+                currentTheme = theme;
+                document.documentElement.className = theme === 'dark' ? 'dark-theme' : '';
+                themeToggleBtn.innerHTML = theme === 'dark' ? `<svg width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" d="M12 21q-3.75 0-6.375-2.625T3 12q0-3.75 2.625-6.375T12 3q.35 0 .688.025t.662.075q-1.025.725-1.638 1.888T11.1 7.5q0 2.25 1.575 3.825T16.5 12.9q1.375 0 2.525-.613T20.9 10.65q.05.325.075.662T21 12q0 3.75-2.625 6.375T12 21Z"/></svg>` : `<svg width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" d="M12 17q-2.075 0-3.538-1.463T7 12q0-2.075 1.463-3.538T12 7q2.075 0 3.538 1.463T17 12q0 2.075-1.463 3.538T12 17ZM12 20q3.325 0 5.663-2.338T20 12q0-3.325-2.338-5.663T12 4Q8.675 4 6.337 6.337T4 12q0 3.325 2.337 5.663T12 20ZM11 1v2h2V1h-2Zm-6.75 4.3-.9-.9L4.8 3.05l.9.9L7.05 5.3ZM18.95 5.3l.9-.9l1.45 1.45l-.9.9L18.95 5.3ZM11 21v2h2v-2h-2Zm-6.75-2.95-.9.9l1.45 1.45l.9-.9L7.05 18.7ZM1 13v-2h2v2H1Zm20 0v-2h2v2h-2Zm-2.05 5.7.9.9l1.45-1.45l-.9-.9L18.95 18.7Z"/></svg>`;
+                saveTheme();
+                renderSummary();
+            };
+
+            const showModal = (modal) => { modal.style.display = 'flex'; };
+            const hideModal = (modal) => { modal.style.display = 'none'; };
+
+            const showConfirm = (title, message, callback) => {
+                confirmTitle.textContent = title;
+                confirmMessage.textContent = message;
+                confirmCallback = callback;
+                showModal(confirmModal);
+            };
+
+            const addExpense = (e) => {
+                e.preventDefault();
+                const expenseData = {
+                    id: Date.now().toString(), value: document.getElementById('value').value,
+                    category: document.getElementById('category').value, date: document.getElementById('date').value,
+                    observation: document.getElementById('observation').value.trim()
+                };
+                expenses.push(expenseData);
+                saveExpenses();
+                renderAll();
+                hideModal(expenseModal);
+            };
+            const deleteExpense = (id) => {
+                showConfirm("Excluir Despesa", "Esta ação não pode ser desfeita.", () => {
+                    expenses = expenses.filter(exp => exp.id !== id);
+                    saveExpenses();
+                    renderAll();
+                });
+            };
+
+            const addFixedExpense = (e) => {
+                e.preventDefault();
+                const newFixedExpense = {
+                    id: Date.now().toString(), description: document.getElementById('fixed-description').value,
+                    value: document.getElementById('fixed-value').value, category: document.getElementById('fixed-category').value,
+                    dueDay: parseInt(document.getElementById('fixed-due-day').value)
+                };
+                fixedExpenses.push(newFixedExpense);
+                saveFixedExpenses();
+                renderFixedExpenses();
+                hideModal(fixedExpenseModal);
+                processFixedExpenses();
+            };
+            const deleteFixedExpense = (id) => {
+                showConfirm("Excluir Despesa Fixa", "Isto irá remover a despesa de lançamentos futuros.", () => {
+                    fixedExpenses = fixedExpenses.filter(exp => exp.id !== id);
+                    saveFixedExpenses();
+                    renderFixedExpenses();
+                });
+            };
+            
+            const switchView = (viewId) => {
+                views.forEach(view => view.classList.remove('active'));
+                tabs.forEach(tab => tab.classList.remove('active'));
+                document.getElementById(viewId).classList.add('active');
+                document.querySelector(`.tab[data-view="${viewId}"]`).classList.add('active');
+                updateFabVisibility(viewId);
+            };
+
+            const updateFabVisibility = (viewId) => {
+                fabContainer.classList.remove('open');
+                if (viewId === 'list-view') {
+                    fabMainBtn.style.display = 'flex';
+                    fabAddManualBtn.style.display = 'flex';
+                    fabAddMicBtn.style.display = isRecognitionAvailable ? 'flex' : 'none';
+                    fabAddFixedBtn.style.display = 'none';
+                } else if (viewId === 'fixed-view') {
+                    fabMainBtn.style.display = 'none'; // Esconde o menu expansível
+                    fabAddManualBtn.style.display = 'none';
+                    fabAddMicBtn.style.display = 'none';
+                    fabAddFixedBtn.style.display = 'flex'; // Mostra apenas o botão de fixa
+                } else { // summary-view
+                    fabMainBtn.style.display = 'none';
+                    fabAddManualBtn.style.display = 'none';
+                    fabAddMicBtn.style.display = 'none';
+                    fabAddFixedBtn.style.display = 'none';
+                }
+            };
+
+            const handleVoiceCommand = () => {
+                if (!isRecognitionAvailable) return;
+                micFeedback.textContent = "A ouvir... Ex: 'lançar 50 reais em lazer'";
+                micFeedback.style.color = 'var(--text-muted-color)';
+                micFeedback.style.display = 'block';
+                addExpenseMicBtn.disabled = true;
+                recognition.start();
+            };
+
+            const processFixedExpenses = () => {
+                const today = new Date();
+                const currentMonthYear = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+                let expensesAdded = false;
+
+                fixedExpenses.forEach(fixed => {
+                    const alreadyLaunched = expenses.some(exp => exp.id === `fixed-${fixed.id}-${currentMonthYear}`);
+                    if (!alreadyLaunched) {
+                        const launchDate = new Date(today.getFullYear(), today.getMonth(), fixed.dueDay);
+                        if (launchDate <= today) {
+                            expenses.push({
+                                id: `fixed-${fixed.id}-${currentMonthYear}`, value: fixed.value,
+                                category: fixed.category, date: launchDate.toISOString().slice(0, 10),
+                                observation: `Lançamento automático: ${fixed.description}`
+                            });
+                            expensesAdded = true;
+                        }
+                    }
+                });
+
+                if (expensesAdded) { saveExpenses(); }
+            };
+            
+            const renderAll = () => { renderExpenses(); renderFixedExpenses(); renderSummary(); };
+
+            const init = () => {
+                loadTheme(); loadExpenses(); loadFixedExpenses();
+                processFixedExpenses();
+                renderAll();
+                updateFabVisibility('list-view');
+
+                themeToggleBtn.addEventListener('click', () => setTheme(currentTheme === 'light' ? 'dark' : 'light'));
+                tabs.forEach(tab => tab.addEventListener('click', () => switchView(tab.dataset.view)));
+                
+                addExpenseBtn.addEventListener('click', () => { expenseForm.reset(); document.getElementById('date').valueAsDate = new Date(); showModal(expenseModal); });
+                addFixedExpenseBtn.addEventListener('click', () => { fixedExpenseForm.reset(); showModal(fixedExpenseModal); });
+                if(isRecognitionAvailable) addExpenseMicBtn.addEventListener('click', handleVoiceCommand);
+                
+                fabMainBtn.addEventListener('click', () => fabContainer.classList.toggle('open'));
+                fabAddManualBtn.addEventListener('click', () => { expenseForm.reset(); document.getElementById('date').valueAsDate = new Date(); showModal(expenseModal); });
+                fabAddFixedBtn.addEventListener('click', () => { fixedExpenseForm.reset(); showModal(fixedExpenseModal); });
+                if(isRecognitionAvailable) fabAddMicBtn.addEventListener('click', handleVoiceCommand);
+                
+                cancelBtn.addEventListener('click', () => hideModal(expenseModal));
+                expenseForm.addEventListener('submit', addExpense);
+                fixedCancelBtn.addEventListener('click', () => hideModal(fixedExpenseModal));
+                fixedExpenseForm.addEventListener('submit', addFixedExpense);
+                confirmOkBtn.addEventListener('click', () => { if (confirmCallback) confirmCallback(); hideModal(confirmModal); });
+                confirmCancelBtn.addEventListener('click', () => {
+                    hideModal(confirmModal)
+                });
+            };
+
+            init();
+        });
+    </script>
 </body>
 </html>
