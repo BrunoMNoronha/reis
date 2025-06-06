@@ -315,7 +315,7 @@
 
     <header class="container">
         <div class="logo">Reis</div>
-        <button id="theme-toggle-btn" title="Alternar tema">
+        <button id="theme-toggle-btn" title="Alternar tema" aria-label="Alternar entre tema claro e escuro">
             <!-- O ícone será inserido via JS -->
         </button>
     </header>
@@ -336,6 +336,7 @@
         <section class="view-toggle">
             <div class="tab active" data-view="list-view">Lista</div>
             <div class="tab" data-view="summary-view">Resumo</div>
+            <div class="tab" data-view="fixed-view">Fixas</div>
         </section>
         
         <!-- Vista da Lista -->
@@ -373,7 +374,14 @@
                 <div id="analysis-content" class="content"></div>
             </div>
         </section>
-        
+
+        <!-- Vista de Despesas Fixas -->
+        <section id="fixed-view" class="view">
+            <div id="fixed-expense-list-container">
+                <p class="no-fixed-expenses-message">Nenhuma despesa fixa registada.</p>
+            </div>
+            <button class="btn btn-primary" id="add-fixed-expense-btn" style="margin-top:1rem;">Nova Despesa Fixa</button>
+        </section>
     </main>
 
     <footer class="container">
@@ -449,6 +457,58 @@
         </div>
     </div>
 
+    <!-- Template para itens da lista de despesas fixas -->
+    <template id="fixed-expense-item-template">
+        <article class="expense-list-item">
+            <div class="expense-info">
+                <div class="value"></div>
+                <div class="category"></div>
+                <div class="due-day"></div>
+            </div>
+            <div class="expense-actions">
+                <button class="delete-btn" title="Excluir despesa fixa">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+                </button>
+            </div>
+        </article>
+    </template>
+
+    <!-- Modal para adicionar despesa fixa -->
+    <div id="fixed-expense-modal" class="modal">
+        <div class="modal-content">
+            <h2 id="fixed-expense-modal-title">Nova Despesa Fixa</h2>
+            <form id="fixed-expense-form">
+                <div class="form-group">
+                    <label for="fixed-description">Descrição</label>
+                    <input type="text" id="fixed-description" placeholder="Ex: Aluguel, Assinatura" required>
+                </div>
+                <div class="form-group">
+                    <label for="fixed-value">Valor (R$)</label>
+                    <input type="number" id="fixed-value" step="0.01" placeholder="1500,00" required>
+                </div>
+                <div class="form-group">
+                    <label for="fixed-category">Categoria</label>
+                    <select id="fixed-category" required>
+                        <option value="">Selecione uma categoria</option>
+                        <option>Moradia</option>
+                        <option>Lazer</option>
+                        <option>Educação</option>
+                        <option>Transporte</option>
+                        <option>Saúde</option>
+                        <option>Outros</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="fixed-due-day">Dia do Vencimento</label>
+                    <input type="number" id="fixed-due-day" min="1" max="31" placeholder="5" required>
+                </div>
+                <div class="form-buttons">
+                    <button type="submit" class="btn btn-primary">Salvar</button>
+                    <button type="button" class="btn btn-secondary" id="fixed-cancel-btn">Cancelar</button>
+                </div>
+            </form>
+        </div>
+    </div>
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
@@ -473,9 +533,17 @@
             const confirmModal = document.getElementById('confirm-modal');
             const confirmOkBtn = document.getElementById('confirm-ok-btn');
             const confirmCancelBtn = document.getElementById('confirm-cancel-btn');
+            const fixedExpenseModal = document.getElementById('fixed-expense-modal');
+            const fixedExpenseForm = document.getElementById('fixed-expense-form');
+            const fixedExpenseListContainer = document.getElementById('fixed-expense-list-container');
+            const noFixedExpensesMessage = document.querySelector('.no-fixed-expenses-message');
+            const fixedExpenseItemTemplate = document.getElementById('fixed-expense-item-template');
+            const addFixedExpenseBtn = document.getElementById('add-fixed-expense-btn');
+            const fixedCancelBtn = document.getElementById('fixed-cancel-btn');
 
             // === Estado da Aplicação ===
             let expenses = [];
+            let fixedExpenses = [];
             let currentTheme = 'light';
             let expenseChart = null; // Guarda a instância do gráfico
             let confirmCallback = null; // Guarda a ação a ser confirmada
@@ -499,6 +567,11 @@
             const loadExpenses = () => {
                 const storedExpenses = localStorage.getItem('reis_expenses');
                 expenses = storedExpenses ? JSON.parse(storedExpenses) : [];
+            };
+            const saveFixedExpenses = () => localStorage.setItem('reis_fixed_expenses', JSON.stringify(fixedExpenses));
+            const loadFixedExpenses = () => {
+                const stored = localStorage.getItem('reis_fixed_expenses');
+                fixedExpenses = stored ? JSON.parse(stored) : [];
             };
             const saveTheme = () => localStorage.setItem('reis_theme', currentTheme);
             const loadTheme = () => {
@@ -537,6 +610,26 @@
                     templateClone.querySelector('.delete-btn').addEventListener('click', () => deleteExpense(expense.id));
                     
                     expenseListContainer.appendChild(templateClone);
+                });
+            };
+            
+            const renderFixedExpenses = () => {
+                fixedExpenseListContainer.innerHTML = '';
+                if (fixedExpenses.length === 0) {
+                    fixedExpenseListContainer.appendChild(noFixedExpensesMessage);
+                    noFixedExpensesMessage.style.display = 'block';
+                    return;
+                }
+                noFixedExpensesMessage.style.display = 'none';
+                fixedExpenses.forEach(exp => {
+                    const templateClone = fixedExpenseItemTemplate.content.cloneNode(true);
+                    const item = templateClone.querySelector('.expense-list-item');
+                    item.dataset.id = exp.id;
+                    templateClone.querySelector('.value').textContent = `R$ ${parseFloat(exp.value || exp.amount).toFixed(2).replace('.', ',')} - ${exp.description || exp.name}`;
+                    templateClone.querySelector('.category').textContent = exp.category;
+                    templateClone.querySelector('.due-day').textContent = `Vence todo dia ${exp.dueDay || exp.dueDate}`;
+                    templateClone.querySelector('.delete-btn').addEventListener('click', () => deleteFixedExpense(exp.id));
+                    fixedExpenseListContainer.appendChild(templateClone);
                 });
             };
             
@@ -666,7 +759,34 @@
                     renderAll();
                 });
             };
-            
+
+            const addFixedExpense = (e) => {
+                e.preventDefault();
+                const newFixed = {
+                    id: Date.now().toString(),
+                    description: document.getElementById('fixed-description').value,
+                    value: document.getElementById('fixed-value').value,
+                    category: document.getElementById('fixed-category').value,
+                    dueDay: parseInt(document.getElementById('fixed-due-day').value)
+                };
+                fixedExpenses.push(newFixed);
+                saveFixedExpenses();
+                renderFixedExpenses();
+                hideFixedExpenseModal();
+            };
+            const deleteFixedExpense = (id) => {
+                fixedExpenses = fixedExpenses.filter(exp => exp.id !== id);
+                saveFixedExpenses();
+                renderFixedExpenses();
+            };
+
+            const showFixedExpenseModal = () => {
+                fixedExpenseForm.reset();
+                fixedExpenseModal.style.display = 'flex';
+                document.getElementById('fixed-description').focus();
+            };
+            const hideFixedExpenseModal = () => fixedExpenseModal.style.display = 'none';
+
             const switchView = (viewId) => {
                 views.forEach(view => view.classList.remove('active'));
                 tabs.forEach(tab => tab.classList.remove('active'));
@@ -760,7 +880,7 @@
                 promptData += "Forneça uma breve análise (2-4 frases) dos meus hábitos de consumo este mês, destacando as categorias mais significativas. Ofereça uma ou duas sugestões concisas e práticas para otimizar os meus gastos. Seja amigável e direto. Use a moeda Real Brasileiro (R$) quando mencionar valores.";
 
                 const payload = { contents: [{ role: "user", parts: [{ text: promptData }] }] };
-                const apiKey = "";
+                const apiKey = process.env.GEMINI_API_KEY || ""; // Ensure the key is securely stored and retrieved
                 const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
                 
                 try {
@@ -785,6 +905,7 @@
             // === Inicialização ===
             const renderAll = () => {
                 renderExpenses();
+                renderFixedExpenses();
                 renderSummary();
                 analysisContainer.style.display = 'none';
             };
@@ -792,6 +913,7 @@
             const init = () => {
                 loadTheme();
                 loadExpenses();
+                loadFixedExpenses();
                 renderAll();
 
                 // Listeners de eventos
@@ -814,6 +936,10 @@
                     if (e.target === expenseModal) hideModal();
                     if (e.target === confirmModal) hideConfirm();
                 });
+
+                addFixedExpenseBtn.addEventListener('click', showFixedExpenseModal);
+                fixedCancelBtn.addEventListener('click', hideFixedExpenseModal);
+                fixedExpenseForm.addEventListener('submit', addFixedExpense);
             };
 
             init();
