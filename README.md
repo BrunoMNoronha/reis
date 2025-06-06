@@ -11,6 +11,7 @@
 - ✅ Saldo acumulado automaticamente
 - ✅ Armazenamento local com `localStorage`
 - ✅ Interface limpa, responsiva e sem anúncios
+- ✅ Exportação de dados em CSV
 
 ---
 
@@ -42,7 +43,6 @@
 ## 📈 Em breve
 
 - 📊 Gráficos interativos com Chart.js
-- 📁 Exportação de dados em CSV
 - 🔐 Proteção com PIN
 - 🌙 Tema escuro automático
 - ☁️ Backup e restauração local
