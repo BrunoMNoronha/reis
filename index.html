@@ -96,6 +96,16 @@
         
         const getCategory = (id) => CATEGORIES.find(c => c.id === id) || { name: 'Desconhecido', icon: 'help-circle' };
 
+        // Escapa caracteres HTML básicos
+        const escapeHTML = (str) =>
+            String(str).replace(/[&<>"']/g, c => ({
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#39;'
+            }[c]));
+
         // --- AI ASSISTANT MODULE ---
         const AiAssistant = {
             analyze: (transactions, budgets) => {
@@ -330,7 +340,7 @@
                 <form id="transaction-form" class="p-4 bg-gray-800 rounded-xl space-y-4">
                     <h3 class="text-lg font-semibold text-white">${transactionToEdit ? 'Editar Transação' : 'Nova Transação'}</h3>
                     <div><input type="number" step="0.01" id="t-amount" placeholder="Valor (R$)" value="${t.amount || ''}" required class="w-full bg-gray-700 p-2 rounded-lg border border-gray-600 focus:outline-none focus:ring-2 focus:ring-teal-500 text-white"></div>
-                    <div><input type="text" id="t-description" placeholder="Descrição" value="${t.description || ''}" required class="w-full bg-gray-700 p-2 rounded-lg border border-gray-600 focus:outline-none focus:ring-2 focus:ring-teal-500 text-white"></div>
+                    <div><input type="text" id="t-description" placeholder="Descrição" value="${escapeHTML(t.description || '')}" required class="w-full bg-gray-700 p-2 rounded-lg border border-gray-600 focus:outline-none focus:ring-2 focus:ring-teal-500 text-white"></div>
                     <div class="flex space-x-4">
                         <select id="t-type" class="w-1/2 bg-gray-700 p-2 rounded-lg border border-gray-600 focus:outline-none focus:ring-2 focus:ring-teal-500 text-white">
                             <option value="expense" ${t.type === 'expense' ? 'selected':''}>Despesa</option>
@@ -355,7 +365,7 @@
                                 <i data-lucide="${getCategory(t.category).icon}" class="text-${t.type === 'income' ? 'green' : 'red'}-400"></i>
                             </div>
                             <div>
-                                <p class="font-semibold text-white">${t.description}</p>
+                                <p class="font-semibold text-white">${escapeHTML(t.description)}</p>
                                 <p class="text-xs text-gray-400">${new Date(t.date).toLocaleDateString('pt-BR', {timeZone: 'UTC'})} &bull; ${getCategory(t.category).name}</p>
                             </div>
                         </div>
