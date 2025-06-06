@@ -1,0 +1,647 @@
+// --- APPLICATION STATE ---
+const AppState = {
+user: null,
+view: 'auth', // 'auth', 'dashboard', 'transactions', 'budgets', 'settings'
+transactions: [],
+budgets: [],
+recurring: [],
+isLoading: true,
+transactionToEdit: null
+};
+
+// --- UTILITIES (WebAuthn & Data Helpers) ---
+const base64url = {
+encode: (buffer) => btoa(String.fromCharCode(...new Uint8Array(buffer))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, ''),
+decode: (str) => {
+const base64 = str.replace(/-/g, '+').replace(/_/g, '/');
+const raw = atob(base64);
+const buffer = new Uint8Array(raw.length);
+for (let i = 0; i < raw.length; i++) { buffer[i] = raw.charCodeAt(i); }
+return buffer;
+}
+};
+
+// --- DATA PROVIDER (LocalStorage Abstraction) ---
+const DataProvider = {
+getUser: (username) => JSON.parse(localStorage.getItem(`reis_user_${username}`)),
+saveUser: (user) => localStorage.setItem(`reis_user_${user.username}`, JSON.stringify(user)),
+getData: (userId, key) => JSON.parse(localStorage.getItem(`reis_data_${userId}_${key}`)) || [],
+saveData: (userId, key, data) => localStorage.setItem(`reis_data_${userId}_${key}`, JSON.stringify(data)),
+getLastLoggedInUser: () => localStorage.getItem('reis_lastUser'),
+setLastLoggedInUser: (username) => localStorage.setItem('reis_lastUser', username),
+clearLastLoggedInUser: () => localStorage.removeItem('reis_lastUser'),
+};
+
+// --- CATEGORIES & ICONS ---
+const CATEGORIES = [
+{ id: 'income', name: 'Receita', icon: 'landmark' },
+{ id: 'shopping', name: 'Compras', icon: 'shopping-bag' },
+{ id: 'food', name: 'Alimentação', icon: 'utensils' },
+{ id: 'transport', name: 'Transporte', icon: 'car' },
+{ id: 'housing', name: 'Moradia', icon: 'home' },
+{ id: 'bills', name: 'Contas', icon: 'receipt' },
+];
+
+const getCategory = (id) => CATEGORIES.find(c => c.id === id) || { name: 'Desconhecido', icon: 'help-circle' };
+
+// --- AI ASSISTANT MODULE ---
+const AiAssistant = {
+analyze: (transactions, budgets) => {
+const insights = [];
+const today = new Date();
+const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+
+const recentTransactions = transactions.filter(t => new Date(t.date) >= startOfMonth);
+const expensesThisMonth = recentTransactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
+
+// 1. Unusual Spending
+if (transactions.length > 10) {
+const last30DaysExpenses = transactions.filter(t => (today - new Date(t.date)) / (1000 * 3600 * 24) <= 30 && t.type === 'expense');
+const last7DaysExpenses = last30DaysExpenses.filter(t => (today - new Date(t.date)) / (1000 * 3600 * 24) <= 7);
+
+const avgDailySpendingLast30Days = last30DaysExpenses.reduce((acc, t) => acc + t.amount, 0) / 30;
+const avgDailySpendingLast7Days = last7DaysExpenses.reduce((acc, t) => acc + t.amount, 0) / 7;
+
+if (avgDailySpendingLast7Days > avgDailySpendingLast30Days * 1.75 && avgDailySpendingLast30Days > 0) {
+insights.push({
+id: 'unusual_spending', title: 'Padrão Incomum Detectado',
+message: `Seus gastos nos últimos 7 dias estão consideravelmente mais altos que a sua média mensal.`,
+icon: 'alert-triangle', color: 'yellow'
+});
+}
+}
+
+// 2. Budget Insights
+budgets.forEach(budget => {
+const spent = recentTransactions.filter(t => t.type === 'expense' && t.category === budget.category).reduce((sum, t) => sum + t.amount, 0);
+const percentage = (spent / budget.amount) * 100;
+if (percentage >= 80 && percentage <= 100) {
+insights.push({
+id: `budget_warning_${budget.category}`, title: `Atenção ao Orçamento`,
+message: `Você já utilizou ${percentage.toFixed(0)}% do seu orçamento para "${getCategory(budget.category).name}".`,
+icon: 'piggy-bank', color: 'yellow'
+});
+}
+});
+
+// 3. Positive Reinforcement
+const incomeThisMonth = recentTransactions.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
+if (incomeThisMonth > expensesThisMonth && expensesThisMonth > 0) {
+insights.push({ id: 'positive_balance', title: 'Excelente Controle!', message: 'Você está terminando o mês com um saldo positivo. Continue assim!', icon: 'smile', color: 'green' });
+}
+
+// 4. Projection
+const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+const daysPassed = today.getDate();
+if(daysPassed > 0 && expensesThisMonth > 0) {
+const dailyAvgExpense = expensesThisMonth / daysPassed;
+const projectedExpense = expensesThisMonth + (dailyAvgExpense * (daysInMonth - daysPassed));
+insights.push({ id: 'projection', title: 'Projeção para o Fim do Mês', message: `Sua despesa total projetada para este mês é de R$ ${projectedExpense.toFixed(2)}.`, icon: 'trending-up', color: 'blue' });
+}
+
+return insights.slice(0, 3);
+}
+};
+
+// --- HTML TEMPLATE RENDERERS ---
+// Each function returns an HTML string for a "component" or "page".
+
+const renderAuthPage = (isRegister = false, error = '') => {
+return `
+<div class="min-h-screen flex flex-col justify-center items-center p-4">
+<div class="w-full max-w-md bg-gray-800 rounded-2xl shadow-lg p-8 space-y-6">
+<div class="text-center">
+<h1 class="text-4xl font-bold text-teal-400">Reis</h1>
+<p class="text-gray-400">${isRegister ? 'Crie sua conta' : 'Acesse sua conta'}</p>
+</div>
+${error ? `<div class="bg-red-500/20 text-red-300 p-3 rounded-lg text-center">${error}</div>` : ''}
+<form id="password-form" class="space-y-4">
+<div class="relative">
+<i data-lucide="user" class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500"></i>
+<input id="username" type="text" placeholder="Nome de usuário" required class="w-full bg-gray-700 border border-gray-600 rounded-lg py-3 pl-12 pr-4 focus:outline-none focus:ring-2 focus:ring-teal-400 text-white">
+</div>
+<div class="relative">
+<i data-lucide="lock" class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500"></i>
+<input id="password" type="password" placeholder="Senha" required class="w-full bg-gray-700 border border-gray-600 rounded-lg py-3 pl-12 pr-12 focus:outline-none focus:ring-2 focus:ring-teal-400 text-white">
+<button type="button" id="toggle-password" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white">
+<i data-lucide="eye"></i>
+</button>
+</div>
+<button type="submit" class="w-full bg-teal-500 hover:bg-teal-600 font-bold py-3 rounded-lg transition-colors">
+${isRegister ? 'Registrar' : 'Entrar'}
+</button>
+</form>
+<div class="flex items-center justify-center space-x-2">
+<hr class="w-full border-gray-600"/><span class="text-gray-500">OU</span><hr class="w-full border-gray-600"/>
+</div>
+<button id="biometric-btn" class="w-full bg-gray-700 hover:bg-gray-600 font-bold py-3 rounded-lg transition-colors flex items-center justify-center space-x-2">
+<i data-lucide="fingerprint"></i>
+<span>${isRegister ? 'Registrar com Biometria' : 'Entrar com Biometria'}</span>
+</button>
+<p class="text-center text-sm text-gray-400">
+${isRegister ? 'Já tem uma conta?' : 'Não tem uma conta?'}
+<button id="toggle-register" class="font-semibold text-teal-400 hover:underline ml-1">
+${isRegister ? 'Faça login' : 'Registre-se'}
+</button>
+</p>
+</div>
+</div>
+`;
+};
+
+const renderMainLayout = () => {
+const { view } = AppState;
+const navItem = (targetView, icon, label) => `
+<button data-view="${targetView}" class="nav-item flex flex-col items-center justify-center space-y-1 w-full p-2 rounded-lg transition-colors ${view === targetView ? 'bg-teal-500/20 text-teal-400' : 'text-gray-400 hover:bg-gray-700'}">
+<i data-lucide="${icon}" class="w-6 h-6"></i>
+<span class="text-xs font-medium">${label}</span>
+</button>
+`;
+return `
+<div class="min-h-screen text-white font-sans flex flex-col md:flex-row">
+<nav class="md:w-24 bg-gray-800/50 backdrop-blur-sm p-2 flex md:flex-col justify-around md:justify-start md:space-y-4 order-last md:order-first border-t md:border-t-0 md:border-r border-gray-700">
+${navItem('dashboard', 'home', 'Início')}
+${navItem('transactions', 'receipt', 'Lançar')}
+${navItem('budgets', 'piggy-bank', 'Orçamento')}
+${navItem('settings', 'settings', 'Ajustes')}
+<div class="md:mt-auto">
+<button id="logout-btn" class="flex flex-col items-center justify-center space-y-1 w-full p-2 rounded-lg transition-colors text-gray-400 hover:bg-gray-700">
+<i data-lucide="log-out" class="w-6 h-6"></i>
+<span class="text-xs font-medium">Sair</span>
+</button>
+</div>
+</nav>
+
+<main id="main-content" class="flex-1 overflow-y-auto pb-20 md:pb-0">
+<!-- Page content will be injected here -->
+</main>
+
+<footer class="fixed bottom-0 left-0 w-full bg-gray-900 text-center text-xs text-gray-500 py-1 order-last hidden md:block">
+Reis v3.2 - 100% Local & Seguro
+</footer>
+</div>
+`;
+};
+
+const renderDashboard = () => {
+const { transactions, budgets, user, recurring } = AppState;
+
+const totalBalance = transactions.reduce((acc, t) => acc + (t.type === 'income' ? t.amount : -t.amount), 0);
+
+const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+const periodTransactions = transactions.filter(t => new Date(t.date) >= startOfMonth);
+
+const totalIncome = periodTransactions.filter(t => t.type === 'income').reduce((acc, t) => acc + t.amount, 0);
+const totalExpenses = periodTransactions.filter(t => t.type === 'expense').reduce((acc, t) => acc + t.amount, 0);
+const periodBalance = totalIncome - totalExpenses;
+
+const insights = AiAssistant.analyze(transactions, budgets);
+
+const getBudgetProgress = (category) => {
+const budget = budgets.find(b => b.category === category);
+if (!budget) return { spent: 0, amount: 0, percentage: 0 };
+const spent = periodTransactions.filter(t => t.type === 'expense' && t.category === category).reduce((sum, t) => sum + t.amount, 0);
+return { spent, amount: budget.amount, percentage: budget.amount > 0 ? (spent / budget.amount) * 100 : 0 };
+};
+const getProgressBarColor = (percentage) => {
+if (percentage > 100) return 'bg-red-500';
+if (percentage > 80) return 'bg-yellow-500';
+return 'bg-teal-500';
+};
+
+return `
+<div class="p-4 md:p-6 space-y-6">
+<h1 class="text-3xl font-bold text-white">Olá, ${user?.username}!</h1>
+<!-- KPIs -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+<div class="bg-gray-800 p-4 rounded-xl">
+<p class="text-gray-400 text-sm">Saldo Total</p>
+<p class="text-2xl font-bold ${totalBalance >= 0 ? 'text-green-400' : 'text-red-400'}">R$ ${totalBalance.toFixed(2)}</p>
+</div>
+<div class="bg-gray-800 p-4 rounded-xl">
+<p class="text-gray-400 text-sm">Balanço do Mês</p>
+<p class="text-2xl font-bold ${periodBalance >= 0 ? 'text-green-400' : 'text-red-400'}">R$ ${periodBalance.toFixed(2)}</p>
+<div class="flex text-xs mt-1"><span class="text-green-500 mr-2">↑ R$${totalIncome.toFixed(2)}</span><span class="text-red-500">↓ R$${totalExpenses.toFixed(2)}</span></div>
+</div>
+<div class="bg-gray-800 p-4 rounded-xl">
+<p class="text-gray-400 text-sm">Recorrências</p>
+<p class="text-2xl font-bold text-white">${recurring.length}</p>
+<p class="text-gray-500 text-xs mt-1">ativas este mês</p>
+</div>
+</div>
+<!-- AI Insights -->
+<div>
+<h2 class="text-xl font-semibold text-white mb-3">Assistente IA</h2>
+<div class="space-y-3">
+${insights.length > 0 ? insights.map(i => `
+<div class="bg-${i.color}-500/10 border-l-4 border-${i.color}-500 p-4 rounded-lg flex items-center space-x-4">
+<i data-lucide="${i.icon}" class="w-8 h-8 text-${i.color}-500"></i>
+<div><h3 class="font-bold text-white">${i.title}</h3><p class="text-gray-300 text-sm">${i.message}</p></div>
+</div>`).join('') :
+`<div class="bg-gray-800 p-4 rounded-lg text-center text-gray-400">Nenhum insight. Adicione mais transações.</div>`
+}
+</div>
+</div>
+<!-- Budget Progress -->
+<div>
+<h2 class="text-xl font-semibold text-white mb-3">Orçamentos do Mês</h2>
+<div class="space-y-4">
+${budgets.length > 0 ? budgets.map(b => {
+const { spent, amount, percentage } = getBudgetProgress(b.category);
+return `
+<div class="bg-gray-800 p-4 rounded-lg">
+<div class="flex justify-between items-center mb-1">
+<span class="font-semibold text-white">${getCategory(b.category).name}</span>
+<span class="text-sm text-gray-400">R$ ${spent.toFixed(2)} / R$ ${amount.toFixed(2)}</span>
+</div>
+<div class="w-full bg-gray-700 rounded-full h-2.5">
+<div class="${getProgressBarColor(percentage)} h-2.5 rounded-full" style="width: ${Math.min(percentage, 100)}%;"></div>
+</div>
+</div>`;
+}).join('') :
+`<div class="bg-gray-800 p-4 rounded-lg text-center text-gray-400">
+<p>Nenhum orçamento definido.</p>
+<button data-view="budgets" class="nav-item text-teal-400 hover:underline mt-1">Crie um agora</button>
+</div>`
+}
+</div>
+</div>
+</div>
+`;
+};
+
+const renderTransactionsPage = () => {
+const { transactions, transactionToEdit } = AppState;
+
+const t = transactionToEdit || {};
+const formHtml = `
+<form id="transaction-form" class="p-4 bg-gray-800 rounded-xl space-y-4">
+<h3 class="text-lg font-semibold text-white">${transactionToEdit ? 'Editar Transação' : 'Nova Transação'}</h3>
+<div><input type="number" step="0.01" id="t-amount" placeholder="Valor (R$)" value="${t.amount || ''}" required class="w-full bg-gray-700 p-2 rounded-lg border border-gray-600 focus:outline-none focus:ring-2 focus:ring-teal-500 text-white"></div>
+<div><input type="text" id="t-description" placeholder="Descrição" value="${t.description || ''}" required class="w-full bg-gray-700 p-2 rounded-lg border border-gray-600 focus:outline-none focus:ring-2 focus:ring-teal-500 text-white"></div>
+<div class="flex space-x-4">
+<select id="t-type" class="w-1/2 bg-gray-700 p-2 rounded-lg border border-gray-600 focus:outline-none focus:ring-2 focus:ring-teal-500 text-white">
+<option value="expense" ${t.type === 'expense' ? 'selected':''}>Despesa</option>
+<option value="income" ${t.type === 'income' ? 'selected':''}>Receita</option>
+</select>
+<select id="t-category" class="w-1/2 bg-gray-700 p-2 rounded-lg border border-gray-600 focus:outline-none focus:ring-2 focus:ring-teal-500 text-white">
+${CATEGORIES.map(c => `<option value="${c.id}" ${t.category === c.id ? 'selected':''}>${c.name}</option>`).join('')}
+</select>
+</div>
+<div><input type="date" id="t-date" value="${t.date || new Date().toISOString().split('T')[0]}" required class="w-full bg-gray-700 p-2 rounded-lg border border-gray-600 focus:outline-none focus:ring-2 focus:ring-teal-500 text-white"></div>
+<button type="submit" class="w-full bg-teal-500 hover:bg-teal-600 font-bold py-2 rounded-lg transition-colors">${transactionToEdit ? 'Salvar Alterações' : 'Adicionar'}</button>
+${transactionToEdit ? `<button type="button" id="cancel-edit-btn" class="w-full bg-gray-600 hover:bg-gray-500 font-bold py-2 rounded-lg transition-colors mt-2">Cancelar Edição</button>` : ''}
+</form>
+`;
+
+const listHtml = `
+<div id="transaction-list" class="bg-gray-800 rounded-xl p-4 space-y-3">
+${transactions.length > 0 ? transactions.map(t => `
+<div class="flex items-center justify-between p-3 bg-gray-700 rounded-lg">
+<div class="flex items-center space-x-4">
+<div class="p-2 rounded-full bg-${t.type === 'income' ? 'green' : 'red'}-500/20">
+<i data-lucide="${getCategory(t.category).icon}" class="text-${t.type === 'income' ? 'green' : 'red'}-400"></i>
+</div>
+<div>
+<p class="font-semibold text-white">${t.description}</p>
+<p class="text-xs text-gray-400">${new Date(t.date).toLocaleDateString('pt-BR', {timeZone: 'UTC'})} &bull; ${getCategory(t.category).name}</p>
+</div>
+</div>
+<div class="text-right">
+<p class="font-bold ${t.type === 'income' ? 'text-green-400' : 'text-red-400'}">${t.type === 'income' ? '+' : '-'} R$ ${t.amount.toFixed(2)}</p>
+<div>
+<button data-id="${t.id}" class="edit-btn text-xs text-yellow-400 hover:underline mr-2">Editar</button>
+<button data-id="${t.id}" class="delete-btn text-xs text-red-400 hover:underline">Apagar</button>
+</div>
+</div>
+</div>`).join('') : '<p class="text-gray-400 text-center py-4">Nenhuma transação registrada.</p>'}
+</div>
+`;
+
+return `
+<div class="p-4 md:p-6 space-y-6">
+<h1 class="text-3xl font-bold text-white">Histórico de Transações</h1>
+${formHtml}
+${listHtml}
+</div>
+`;
+};
+
+const renderBudgetsPage = () => {
+const { budgets } = AppState;
+return `
+<div class="p-4 md:p-6 space-y-6">
+<h1 class="text-3xl font-bold text-white">Gerenciar Orçamentos</h1>
+<form id="budget-form" class="bg-gray-800 p-4 rounded-xl space-y-4">
+<h3 class="text-lg font-semibold text-white">Novo Orçamento Mensal</h3>
+<div class="flex space-x-4">
+<select id="b-category" class="w-1/2 bg-gray-700 p-2 rounded-lg border border-gray-600 focus:outline-none focus:ring-2 focus:ring-teal-500 text-white">
+${CATEGORIES.filter(c => c.id !== 'income').map(c => `<option value="${c.id}">${c.name}</option>`).join('')}
+</select>
+<input type="number" step="0.01" id="b-amount" placeholder="Valor Limite (R$)" required class="w-1/2 bg-gray-700 p-2 rounded-lg border border-gray-600 focus:outline-none focus:ring-2 focus:ring-teal-500 text-white" />
+</div>
+<button type="submit" class="w-full bg-teal-500 hover:bg-teal-600 font-bold py-2 rounded-lg transition-colors">Adicionar Orçamento</button>
+</form>
+
+<div id="budget-list" class="bg-gray-800 rounded-xl p-4 space-y-3">
+<h3 class="text-lg font-semibold text-white mb-2">Orçamentos Ativos</h3>
+${budgets.length > 0 ? budgets.map(b => `
+<div class="flex items-center justify-between p-3 bg-gray-700 rounded-lg">
+<div class="flex items-center space-x-4">
+<i data-lucide="${getCategory(b.category).icon}" class="text-teal-400"></i>
+<div>
+<p class="font-semibold text-white">${getCategory(b.category).name}</p>
+<p class="text-sm text-gray-400">Limite: R$ ${b.amount.toFixed(2)}</p>
+</div>
+</div>
+<button data-id="${b.id}" class="delete-budget-btn text-red-400 hover:text-red-300"><i data-lucide="trash-2"></i></button>
+</div>
+`).join('') : '<p class="text-gray-400 text-center py-4">Nenhum orçamento criado.</p>'}
+</div>
+</div>
+`;
+};
+
+const renderSettingsPage = () => `
+<div class="p-4 md:p-6 space-y-6">
+<h1 class="text-3xl font-bold text-white">Configurações</h1>
+<div class="bg-gray-800 p-4 rounded-xl space-y-4">
+<h3 class="text-lg font-semibold text-white">Dados e Portabilidade</h3>
+<button id="export-csv-btn" class="w-full bg-blue-500 hover:bg-blue-600 font-bold py-3 rounded-lg flex items-center justify-center space-x-2 transition-colors">
+<i data-lucide="download"></i><span>Exportar Dados para .CSV</span>
+</button>
+</div>
+<div class="bg-gray-800 p-4 rounded-xl space-y-4">
+<h3 class="text-lg font-semibold text-white">Segurança</h3>
+<button id="register-biometrics-btn" class="w-full bg-gray-700 hover:bg-gray-600 font-bold py-3 rounded-lg flex items-center justify-center space-x-2 transition-colors">
+<i data-lucide="fingerprint"></i><span>Registrar Biometria</span>
+</button>
+</div>
+<div class="bg-gray-800 p-4 rounded-xl space-y-4">
+<h3 class="text-lg font-semibold text-white">Sincronização em Nuvem</h3>
+<div class="text-center p-4 bg-gray-700 rounded-lg">
+<p class="text-gray-400">Funcionalidade futura.</p>
+<p class="text-xs text-gray-500">(Suporte para Google Drive, etc.)</p>
+</div>
+</div>
+</div>
+`;
+
+// --- CORE LOGIC & EVENT HANDLERS ---
+const root = document.getElementById('app-root');
+
+const updateUI = () => {
+const { view } = AppState;
+
+if (view === 'auth') {
+root.innerHTML = renderAuthPage();
+} else {
+if (!document.getElementById('main-content')) {
+root.innerHTML = renderMainLayout();
+}
+const mainContent = document.getElementById('main-content');
+if (view === 'dashboard') mainContent.innerHTML = renderDashboard();
+if (view === 'transactions') mainContent.innerHTML = renderTransactionsPage();
+if (view === 'budgets') mainContent.innerHTML = renderBudgetsPage();
+if (view === 'settings') mainContent.innerHTML = renderSettingsPage();
+}
+lucide.createIcons();
+attachEventListeners();
+};
+
+const switchView = (newView) => {
+AppState.view = newView;
+updateUI();
+};
+
+const loadDataForUser = (currentUser) => {
+if (!currentUser) return;
+AppState.transactions = DataProvider.getData(currentUser.id, 'transactions').sort((a, b) => new Date(b.date) - new Date(a.date));
+AppState.budgets = DataProvider.getData(currentUser.id, 'budgets');
+AppState.recurring = DataProvider.getData(currentUser.id, 'recurring');
+};
+
+const login = (userData) => {
+AppState.user = userData;
+loadDataForUser(userData);
+DataProvider.setLastLoggedInUser(userData.username);
+processRecurringTransactions();
+switchView('dashboard');
+};
+
+const logout = () => {
+AppState.user = null;
+DataProvider.clearLastLoggedInUser();
+AppState.transactions = [];
+AppState.budgets = [];
+AppState.recurring = [];
+switchView('auth');
+};
+
+const processRecurringTransactions = () => {
+if (!AppState.user) return;
+const lastRun = new Date(DataProvider.getData(AppState.user.id, 'lastRecurringRun') || 0);
+const today = new Date(); today.setHours(0, 0, 0, 0);
+
+if (lastRun >= today) return;
+
+let newTransactions = [];
+const allRecurring = DataProvider.getData(AppState.user.id, 'recurring');
+
+allRecurring.forEach(r => {
+let nextDueDate = new Date(r.startDate);
+while (nextDueDate <= today) {
+if (nextDueDate > lastRun) {
+const existing = AppState.transactions.find(t => t.recurringId === r.id && new Date(t.date).getTime() === nextDueDate.getTime());
+if (!existing) {
+newTransactions.push({
+id: crypto.randomUUID(), recurringId: r.id, amount: r.amount, category: r.category,
+description: r.description, type: r.type, date: nextDueDate.toISOString().split('T')[0],
+});
+}
+}
+if (r.frequency === 'weekly') nextDueDate.setDate(nextDueDate.getDate() + 7);
+else if (r.frequency === 'monthly') nextDueDate.setMonth(nextDueDate.getMonth() + 1);
+else if (r.frequency === 'annually') nextDueDate.setFullYear(nextDueDate.getFullYear() + 1);
+else break;
+}
+});
+
+if (newTransactions.length > 0) {
+AppState.transactions = [...AppState.transactions, ...newTransactions].sort((a,b) => new Date(b.date) - new Date(a.date));
+DataProvider.saveData(AppState.user.id, 'transactions', AppState.transactions);
+}
+DataProvider.saveData(AppState.user.id, 'lastRecurringRun', today.toISOString());
+};
+
+// --- ATTACH EVENT LISTENERS (Using Event Delegation) ---
+function attachEventListeners() {
+root.onclick = async (e) => {
+const target = e.target.closest('button, a');
+if (!target) return;
+
+// Auth Page
+if (target.id === 'toggle-register') {
+const isRegistering = root.innerHTML.includes('Crie sua conta');
+root.innerHTML = renderAuthPage(!isRegistering);
+lucide.createIcons();
+return;
+}
+if(target.id === 'toggle-password') {
+const passwordInput = document.getElementById('password');
+const isHidden = passwordInput.type === 'password';
+passwordInput.type = isHidden ? 'text' : 'password';
+target.innerHTML = `<i data-lucide="${isHidden ? 'eye-off' : 'eye'}"></i>`;
+lucide.createIcons();
+}
+if (target.id === 'biometric-btn') {
+const isRegistering = root.innerHTML.includes('Crie sua conta');
+const username = document.getElementById('username').value;
+if(isRegistering) {
+if (!username) { root.innerHTML = renderAuthPage(true, "Digite um nome de usuário primeiro."); lucide.createIcons(); return; }
+if (DataProvider.getUser(username)) { root.innerHTML = renderAuthPage(true, 'Este nome de usuário já existe.'); lucide.createIcons(); return; }
+try {
+const cred = await navigator.credentials.create({ publicKey: { challenge: new Uint8Array(32), rp: { name: "Reis App", id: window.location.hostname }, user: { id: new Uint8Array(16), name: username, displayName: username }, pubKeyCredParams: [{ type: "public-key", alg: -7 }], authenticatorSelection: { authenticatorAttachment: "platform", userVerification: "required" } } });
+const newUser = { id: crypto.randomUUID(), username, password: null, credentials: [{ id: base64url.encode(cred.rawId), publicKey: base64url.encode(cred.response.getPublicKey()), algorithm: -7 }] };
+DataProvider.saveUser(newUser); login(newUser);
+} catch (err) { root.innerHTML = renderAuthPage(true, "Falha no registro biométrico."); lucide.createIcons(); }
+} else {
+const lastUser = DataProvider.getLastLoggedInUser();
+if (!lastUser) { root.innerHTML = renderAuthPage(false, "Faça login com senha uma vez para ativar."); lucide.createIcons(); return; }
+const user = DataProvider.getUser(lastUser);
+if (!user || !user.credentials || user.credentials.length === 0) { root.innerHTML = renderAuthPage(false, "Nenhuma biometria encontrada."); lucide.createIcons(); return; }
+try {
+const cred = await navigator.credentials.get({ publicKey: { challenge: new Uint8Array(32), allowCredentials: [{ type: 'public-key', id: base64url.decode(user.credentials[0].id) }] } });
+if (cred) login(user);
+} catch (err) { root.innerHTML = renderAuthPage(false, "Falha na autenticação biométrica."); lucide.createIcons(); }
+}
+return;
+}
+
+// Main Layout
+if (target.matches('.nav-item')) switchView(target.dataset.view);
+if (target.id === 'logout-btn') logout();
+
+// Transactions Page
+if(target.id === 'cancel-edit-btn') { AppState.transactionToEdit = null; updateUI(); }
+if(target.matches('.edit-btn')) {
+const id = target.dataset.id;
+AppState.transactionToEdit = AppState.transactions.find(t => t.id === id);
+updateUI();
+}
+if(target.matches('.delete-btn')) {
+const id = target.dataset.id;
+if(confirm('Tem certeza que deseja apagar esta transação?')) {
+AppState.transactions = AppState.transactions.filter(t => t.id !== id);
+DataProvider.saveData(AppState.user.id, 'transactions', AppState.transactions);
+updateUI();
+}
+}
+
+// Budgets Page
+if(target.matches('.delete-budget-btn')) {
+const id = target.dataset.id;
+AppState.budgets = AppState.budgets.filter(b => b.id !== id);
+DataProvider.saveData(AppState.user.id, 'budgets', AppState.budgets);
+updateUI();
+}
+
+// Settings Page
+if(target.id === 'export-csv-btn') handleExportCSV();
+if(target.id === 'register-biometrics-btn') handleRegisterBiometrics();
+
+};
+
+root.onsubmit = (e) => {
+e.preventDefault();
+const form = e.target;
+
+if (form.id === 'password-form') {
+const isRegistering = root.innerHTML.includes('Crie sua conta');
+const username = form.username.value;
+const password = form.password.value;
+if (!username || !password) { root.innerHTML = renderAuthPage(isRegistering, 'Usuário e senha são obrigatórios.'); lucide.createIcons(); return; }
+
+if(isRegistering) {
+if (DataProvider.getUser(username)) { root.innerHTML = renderAuthPage(true, 'Este nome de usuário já existe.'); lucide.createIcons(); return; }
+const newUser = { id: crypto.randomUUID(), username, password, credentials: [] };
+DataProvider.saveUser(newUser); login(newUser);
+} else {
+const user = DataProvider.getUser(username);
+if(user && user.password === password) login(user);
+else { root.innerHTML = renderAuthPage(false, 'Usuário ou senha inválidos.'); lucide.createIcons(); }
+}
+}
+
+if (form.id === 'transaction-form') {
+const transaction = {
+id: AppState.transactionToEdit ? AppState.transactionToEdit.id : crypto.randomUUID(),
+amount: parseFloat(form['t-amount'].value),
+description: form['t-description'].value,
+category: form['t-category'].value,
+type: form['t-type'].value,
+date: form['t-date'].value,
+};
+
+if(AppState.transactionToEdit) {
+AppState.transactions = AppState.transactions.map(t => t.id === transaction.id ? transaction : t);
+} else {
+AppState.transactions.push(transaction);
+}
+AppState.transactions.sort((a,b) => new Date(b.date) - new Date(a.date));
+DataProvider.saveData(AppState.user.id, 'transactions', AppState.transactions);
+AppState.transactionToEdit = null;
+updateUI();
+}
+
+if (form.id === 'budget-form') {
+const category = form['b-category'].value;
+const amount = parseFloat(form['b-amount'].value);
+if(AppState.budgets.some(b => b.category === category)) { alert('Já existe um orçamento para esta categoria.'); return; }
+
+const newBudget = { id: crypto.randomUUID(), category, amount };
+AppState.budgets.push(newBudget);
+DataProvider.saveData(AppState.user.id, 'budgets', AppState.budgets);
+updateUI();
+}
+};
+}
+
+const handleExportCSV = () => {
+const { transactions, user } = AppState;
+if (transactions.length === 0) { alert('Não há transações para exportar.'); return; }
+const header = "Data,Descricao,Categoria,Valor,Tipo\n";
+const rows = transactions.map(t => `${t.date},"${t.description.replace(/"/g, '""')}",${t.category},${t.amount},${t.type}`).join("\n");
+const blob = new Blob([header + rows], { type: 'text/csv;charset=utf-8;' });
+const link = document.createElement("a");
+link.href = URL.createObjectURL(blob);
+link.download = `Reis_export_${user.username}_${new Date().toISOString().split('T')[0]}.csv`;
+link.click();
+};
+
+const handleRegisterBiometrics = async () => {
+const { user } = AppState;
+if (user.credentials && user.credentials.length > 0) { alert("Biometria já registrada."); return; }
+try {
+const cred = await navigator.credentials.create({ publicKey: { challenge: new Uint8Array(32), rp: { name: "Reis App", id: window.location.hostname }, user: { id: new Uint8Array(16), name: user.username, displayName: user.username }, pubKeyCredParams: [{ type: "public-key", alg: -7 }], authenticatorSelection: { authenticatorAttachment: "platform", userVerification: "required" } } });
+const updatedUser = { ...user, credentials: [{ id: base64url.encode(cred.rawId), publicKey: base64url.encode(cred.response.getPublicKey()), algorithm: -7 }] };
+DataProvider.saveUser(updatedUser);
+AppState.user = updatedUser;
+alert("Biometria registrada com sucesso!");
+} catch (err) { alert("Falha ao registrar biometria."); }
+}
+
+// --- INITIALIZATION ---
+function init() {
+const lastUser = DataProvider.getLastLoggedInUser();
+if (lastUser) {
+const userData = DataProvider.getUser(lastUser);
+if (userData) {
+login(userData);
+return;
+}
+}
+updateUI(); // Show auth page
+}
+
+document.addEventListener('DOMContentLoaded', init);
