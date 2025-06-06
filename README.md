@@ -54,6 +54,12 @@ considerado uma criptografia forte.
 2. Selecione o arquivo exportado anteriormente.
 3. As transações serão carregadas imediatamente no histórico.
 
+### Cadastro de Despesas Fixas
+
+1. Acesse o menu **Recorrências** na navegação inferior.
+2. Preencha a descrição, valor, categoria, tipo, data inicial e frequência.
+3. Clique em **Adicionar** para salvar. Itens existentes podem ser editados ou apagados na lista abaixo do formulário.
+
 ---
 
 ## 📈 Em breve
