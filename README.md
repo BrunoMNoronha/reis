@@ -27,12 +27,12 @@
 
 1. Clone o repositório:
    ```bash
-   git clone https://github.com/seu-usuario/reis-financas.git
+   git clone https://github.com/<seu-usuario>/reis.git
    ```
 
 2. Acesse a pasta do projeto:
    ```bash
-   cd reis-financas
+   cd reis
    ```
 
 3. Abra o arquivo `index.html` diretamente no navegador.
