@@ -53,12 +53,13 @@
         // --- APPLICATION STATE ---
         const AppState = {
             user: null,
-            view: 'auth', // 'auth', 'dashboard', 'transactions', 'budgets', 'settings'
+            view: 'auth', // 'auth', 'dashboard', 'transactions', 'recurring', 'budgets', 'settings'
             transactions: [],
             budgets: [],
             recurring: [],
             isLoading: true,
-            transactionToEdit: null
+            transactionToEdit: null,
+            recurringToEdit: null
         };
 
         // --- UTILITIES (WebAuthn & Data Helpers) ---
@@ -101,6 +102,8 @@
         ];
         
         const getCategory = (id) => CATEGORIES.find(c => c.id === id) || { name: 'Desconhecido', icon: 'help-circle' };
+
+        const FREQ_NAMES = { weekly: 'Semanal', monthly: 'Mensal', annually: 'Anual' };
 
         // Escapa caracteres HTML básicos
         const escapeHTML = (str) =>
@@ -230,6 +233,7 @@
                     <nav class="md:w-24 bg-gray-800/50 backdrop-blur-sm p-2 flex md:flex-col justify-around md:justify-start md:space-y-4 order-last md:order-first border-t md:border-t-0 md:border-r border-gray-700">
                         ${navItem('dashboard', 'home', 'Início')}
                         ${navItem('transactions', 'receipt', 'Lançar')}
+                        ${navItem('recurring', 'repeat', 'Recorrência')}
                         ${navItem('budgets', 'piggy-bank', 'Orçamento')}
                         ${navItem('settings', 'settings', 'Ajustes')}
                         <div class="md:mt-auto">
@@ -394,7 +398,70 @@
                 </div>
             `;
         };
-        
+
+        const renderRecurringPage = () => {
+            const { recurring, recurringToEdit } = AppState;
+            const r = recurringToEdit || {};
+            const formHtml = `
+                <form id="recurring-form" class="p-4 bg-gray-800 rounded-xl space-y-4">
+                    <h3 class="text-lg font-semibold text-white">${recurringToEdit ? 'Editar Recorrência' : 'Nova Recorrência'}</h3>
+                    <div><input type="number" step="0.01" id="r-amount" placeholder="Valor (R$)" value="${r.amount || ''}" required class="w-full bg-gray-700 p-2 rounded-lg border border-gray-600 focus:outline-none focus:ring-2 focus:ring-teal-500 text-white"></div>
+                    <div><input type="text" id="r-description" placeholder="Descrição" value="${escapeHTML(r.description || '')}" required class="w-full bg-gray-700 p-2 rounded-lg border border-gray-600 focus:outline-none focus:ring-2 focus:ring-teal-500 text-white"></div>
+                    <div class="flex space-x-4">
+                        <select id="r-type" class="w-1/2 bg-gray-700 p-2 rounded-lg border border-gray-600 focus:outline-none focus:ring-2 focus:ring-teal-500 text-white">
+                            <option value="expense" ${r.type === 'expense' ? 'selected' : ''}>Despesa</option>
+                            <option value="income" ${r.type === 'income' ? 'selected' : ''}>Receita</option>
+                        </select>
+                        <select id="r-category" class="w-1/2 bg-gray-700 p-2 rounded-lg border border-gray-600 focus:outline-none focus:ring-2 focus:ring-teal-500 text-white">
+                            ${CATEGORIES.map(c => `<option value="${c.id}" ${r.category === c.id ? 'selected' : ''}>${c.name}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="flex space-x-4">
+                        <input type="date" id="r-start-date" value="${r.startDate || new Date().toISOString().split('T')[0]}" required class="w-1/2 bg-gray-700 p-2 rounded-lg border border-gray-600 focus:outline-none focus:ring-2 focus:ring-teal-500 text-white">
+                        <select id="r-frequency" class="w-1/2 bg-gray-700 p-2 rounded-lg border border-gray-600 focus:outline-none focus:ring-2 focus:ring-teal-500 text-white">
+                            <option value="weekly" ${r.frequency === 'weekly' ? 'selected' : ''}>Semanal</option>
+                            <option value="monthly" ${r.frequency === 'monthly' ? 'selected' : ''}>Mensal</option>
+                            <option value="annually" ${r.frequency === 'annually' ? 'selected' : ''}>Anual</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="w-full bg-teal-500 hover:bg-teal-600 font-bold py-2 rounded-lg transition-colors">${recurringToEdit ? 'Salvar Alterações' : 'Adicionar'}</button>
+                    ${recurringToEdit ? `<button type="button" id="cancel-recurring-edit-btn" class="w-full bg-gray-600 hover:bg-gray-500 font-bold py-2 rounded-lg transition-colors mt-2">Cancelar Edição</button>` : ''}
+                </form>
+            `;
+
+            const listHtml = `
+                <div id="recurring-list" class="bg-gray-800 rounded-xl p-4 space-y-3">
+                    ${recurring.length > 0 ? recurring.map(it => `
+                        <div class="flex items-center justify-between p-3 bg-gray-700 rounded-lg">
+                            <div class="flex items-center space-x-4">
+                                <div class="p-2 rounded-full bg-${it.type === 'income' ? 'green' : 'red'}-500/20">
+                                    <i data-lucide="${getCategory(it.category).icon}" class="text-${it.type === 'income' ? 'green' : 'red'}-400"></i>
+                                </div>
+                                <div>
+                                    <p class="font-semibold text-white">${escapeHTML(it.description)}</p>
+                                    <p class="text-xs text-gray-400">${new Date(it.startDate).toLocaleDateString('pt-BR', {timeZone: 'UTC'})} &bull; ${getCategory(it.category).name} &bull; ${FREQ_NAMES[it.frequency]}</p>
+                                </div>
+                            </div>
+                            <div class="text-right">
+                                <p class="font-bold ${it.type === 'income' ? 'text-green-400' : 'text-red-400'}">${it.type === 'income' ? '+' : '-'} R$ ${it.amount.toFixed(2)}</p>
+                                <div>
+                                    <button data-id="${it.id}" class="edit-recurring-btn text-xs text-yellow-400 hover:underline mr-2">Editar</button>
+                                    <button data-id="${it.id}" class="delete-recurring-btn text-xs text-red-400 hover:underline">Apagar</button>
+                                </div>
+                            </div>
+                        </div>`).join('') : '<p class="text-gray-400 text-center py-4">Nenhuma recorrência registrada.</p>'}
+                </div>
+            `;
+
+            return `
+                <div class="p-4 md:p-6 space-y-6">
+                    <h1 class="text-3xl font-bold text-white">Gerenciar Recorrências</h1>
+                    ${formHtml}
+                    ${listHtml}
+                </div>
+            `;
+        };
+
         const renderBudgetsPage = () => {
             const { budgets } = AppState;
             return `
@@ -470,6 +537,7 @@
                 const mainContent = document.getElementById('main-content');
                 if (view === 'dashboard') mainContent.innerHTML = renderDashboard();
                 if (view === 'transactions') mainContent.innerHTML = renderTransactionsPage();
+                if (view === 'recurring') mainContent.innerHTML = renderRecurringPage();
                 if (view === 'budgets') mainContent.innerHTML = renderBudgetsPage();
                 if (view === 'settings') mainContent.innerHTML = renderSettingsPage();
             }
@@ -494,6 +562,7 @@
             loadDataForUser(userData);
             DataProvider.setLastLoggedInUser(userData.username);
             processRecurringTransactions();
+            AppState.recurringToEdit = null;
             switchView('dashboard');
         };
 
@@ -503,6 +572,7 @@
             AppState.transactions = [];
             AppState.budgets = [];
             AppState.recurring = [];
+            AppState.recurringToEdit = null;
             switchView('auth');
         };
         
@@ -606,6 +676,22 @@
                     }
                 }
 
+                // Recurring Page
+                if(target.id === 'cancel-recurring-edit-btn') { AppState.recurringToEdit = null; updateUI(); }
+                if(target.matches('.edit-recurring-btn')) {
+                    const id = target.dataset.id;
+                    AppState.recurringToEdit = AppState.recurring.find(r => r.id === id);
+                    updateUI();
+                }
+                if(target.matches('.delete-recurring-btn')) {
+                    const id = target.dataset.id;
+                    if(confirm('Apagar esta recorrência?')) {
+                        AppState.recurring = AppState.recurring.filter(r => r.id !== id);
+                        DataProvider.saveData(AppState.user.id, 'recurring', AppState.recurring);
+                        updateUI();
+                    }
+                }
+
                 // Budgets Page
                 if(target.matches('.delete-budget-btn')) {
                     const id = target.dataset.id;
@@ -672,6 +758,27 @@
                     const newBudget = { id: crypto.randomUUID(), category, amount };
                     AppState.budgets.push(newBudget);
                     DataProvider.saveData(AppState.user.id, 'budgets', AppState.budgets);
+                    updateUI();
+                }
+
+                if (form.id === 'recurring-form') {
+                    const item = {
+                        id: AppState.recurringToEdit ? AppState.recurringToEdit.id : crypto.randomUUID(),
+                        amount: parseFloat(form['r-amount'].value),
+                        description: form['r-description'].value,
+                        category: form['r-category'].value,
+                        type: form['r-type'].value,
+                        startDate: form['r-start-date'].value,
+                        frequency: form['r-frequency'].value,
+                    };
+
+                    if(AppState.recurringToEdit) {
+                        AppState.recurring = AppState.recurring.map(r => r.id === item.id ? item : r);
+                    } else {
+                        AppState.recurring.push(item);
+                    }
+                    DataProvider.saveData(AppState.user.id, 'recurring', AppState.recurring);
+                    AppState.recurringToEdit = null;
                     updateUI();
                 }
             };
