@@ -58,6 +58,21 @@ considerado uma criptografia forte.
 
 ---
 
+## 📝 Estrutura de itens recorrentes
+
+Para automações de lançamento, cada objeto salvo na chave `recurring` do
+`localStorage` deve conter os seguintes campos:
+
+- `id`: identificador único gerado pelo app;
+- `description`: texto descritivo da transação;
+- `amount`: valor numérico em reais;
+- `category`: uma das categorias suportadas (ex: `food`, `bills`);
+- `type`: `'income'` ou `'expense'`;
+- `startDate`: data inicial no formato `YYYY-MM-DD`;
+- `frequency`: `'weekly'`, `'monthly'` ou `'annually'`.
+
+---
+
 ## 🖼️ Capturas de Tela *(opcional)*
 
 > _Você pode adicionar aqui imagens ou GIFs demonstrando o funcionamento do app._

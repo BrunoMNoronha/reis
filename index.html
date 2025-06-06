@@ -56,6 +56,8 @@
             view: 'auth', // 'auth', 'dashboard', 'transactions', 'budgets', 'settings'
             transactions: [],
             budgets: [],
+            // Each recurring item should contain:
+            // { id, description, amount, category, type, startDate, frequency }
             recurring: [],
             isLoading: true,
             transactionToEdit: null
@@ -99,6 +101,9 @@
             { id: 'housing', name: 'Moradia', icon: 'home' },
             { id: 'bills', name: 'Contas', icon: 'receipt' },
         ];
+
+        // Allowed frequencies for recurring items
+        const FREQUENCIES = ['weekly', 'monthly', 'annually'];
         
         const getCategory = (id) => CATEGORIES.find(c => c.id === id) || { name: 'Desconhecido', icon: 'help-circle' };
 
@@ -663,7 +668,27 @@
                     AppState.transactionToEdit = null;
                     updateUI();
                 }
-                
+
+                if (form.id === 'recurring-form') {
+                    const frequency = form['r-frequency'].value;
+                    const startDate = form['r-start-date'].value;
+                    if (!FREQUENCIES.includes(frequency)) { alert('Frequ\u00eancia inv\u00e1lida.'); return; }
+                    if (!startDate || isNaN(Date.parse(startDate))) { alert('Data de in\u00edcio inv\u00e1lida.'); return; }
+
+                    const recurringItem = {
+                        id: crypto.randomUUID(),
+                        amount: parseFloat(form['r-amount'].value),
+                        description: form['r-description'].value,
+                        category: form['r-category'].value,
+                        type: form['r-type'].value,
+                        startDate,
+                        frequency,
+                    };
+                    AppState.recurring.push(recurringItem);
+                    DataProvider.saveData(AppState.user.id, 'recurring', AppState.recurring);
+                    updateUI();
+                }
+
                 if (form.id === 'budget-form') {
                     const category = form['b-category'].value;
                     const amount = parseFloat(form['b-amount'].value);
