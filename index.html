@@ -58,7 +58,8 @@
             budgets: [],
             recurring: [],
             isLoading: true,
-            transactionToEdit: null
+            transactionToEdit: null,
+            showTransactionForm: false
         };
 
         // --- UTILITIES (WebAuthn & Data Helpers) ---
@@ -339,7 +340,7 @@
         };
 
         const renderTransactionsPage = () => {
-            const { transactions, transactionToEdit } = AppState;
+            const { transactions, transactionToEdit, showTransactionForm } = AppState;
             
             const t = transactionToEdit || {};
             const formHtml = `
@@ -386,11 +387,17 @@
                 </div>
             `;
 
+            const toggleBtn = `
+                <button id="toggle-transaction-form" class="fixed bottom-4 right-4 bg-teal-500 hover:bg-teal-600 text-white p-4 rounded-full shadow-lg focus:outline-none">
+                    <i data-lucide="${showTransactionForm || transactionToEdit ? 'x' : 'plus'}"></i>
+                </button>`;
+
             return `
-                <div class="p-4 md:p-6 space-y-6">
+                <div class="p-4 md:p-6 space-y-6 relative">
                     <h1 class="text-3xl font-bold text-white">Histórico de Transações</h1>
-                    ${formHtml}
+                    ${(showTransactionForm || transactionToEdit) ? formHtml : ''}
                     ${listHtml}
+                    ${toggleBtn}
                 </div>
             `;
         };
@@ -478,6 +485,10 @@
         };
         
         const switchView = (newView) => {
+            if(newView !== 'transactions') {
+                AppState.showTransactionForm = false;
+                AppState.transactionToEdit = null;
+            }
             AppState.view = newView;
             updateUI();
         };
@@ -591,10 +602,16 @@
                 if (target.id === 'logout-btn') logout();
 
                 // Transactions Page
-                if(target.id === 'cancel-edit-btn') { AppState.transactionToEdit = null; updateUI(); }
+                if(target.id === 'toggle-transaction-form') {
+                    AppState.showTransactionForm = !AppState.showTransactionForm;
+                    if(!AppState.showTransactionForm) AppState.transactionToEdit = null;
+                    updateUI();
+                }
+                if(target.id === 'cancel-edit-btn') { AppState.transactionToEdit = null; AppState.showTransactionForm = false; updateUI(); }
                 if(target.matches('.edit-btn')) {
                     const id = target.dataset.id;
                     AppState.transactionToEdit = AppState.transactions.find(t => t.id === id);
+                    AppState.showTransactionForm = true;
                     updateUI();
                 }
                 if(target.matches('.delete-btn')) {
@@ -661,6 +678,7 @@
                     AppState.transactions.sort((a,b) => new Date(b.date) - new Date(a.date));
                     DataProvider.saveData(AppState.user.id, 'transactions', AppState.transactions);
                     AppState.transactionToEdit = null;
+                    AppState.showTransactionForm = false;
                     updateUI();
                 }
                 
