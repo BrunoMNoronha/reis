@@ -51,19 +51,18 @@
 
     <script>
         // --- APPLICATION STATE ---
-        const AppState = {
-            user: null,
-            view: 'auth', // 'auth', 'dashboard', 'transactions', 'recurring', 'budgets', 'settings'
-            transactions: [],
-            budgets: [],
-            // Each recurring item should contain:
-            // { id, description, amount, category, type, startDate, frequency }
-            recurring: [],
-            isLoading: true,
-            transactionToEdit: null,
-            showTransactionForm: false,
-            isSidebarOpen: false
-        };
+const AppState = {
+    user: null,
+    view: 'auth', // ...
+    transactions: [],
+    budgets: [],
+    recurring: [],
+    isLoading: true,
+    transactionToEdit: null,
+    showTransactionForm: false,
+    recurringToEdit: null
+};
+
 
         // --- UTILITIES (WebAuthn & Data Helpers) ---
         const base64url = {
@@ -418,7 +417,62 @@
                 </div>
             `;
         };
-        
+
+        const renderRecurringPage = () => {
+            const { recurring, recurringToEdit } = AppState;
+            const r = recurringToEdit || {};
+            const formHtml = `
+                <form id="recurring-form" class="bg-gray-800 p-4 rounded-xl space-y-4">
+                    <h3 class="text-lg font-semibold text-white">${recurringToEdit ? 'Editar Recorrência' : 'Nova Recorrência'}</h3>
+                    <div><input id="r-description" type="text" placeholder="Descrição" value="${escapeHTML(r.description || '')}" required class="w-full bg-gray-700 p-2 rounded-lg border border-gray-600 focus:outline-none focus:ring-2 focus:ring-teal-500 text-white"></div>
+                    <div><input id="r-amount" type="number" step="0.01" placeholder="Valor (R$)" value="${r.amount || ''}" required class="w-full bg-gray-700 p-2 rounded-lg border border-gray-600 focus:outline-none focus:ring-2 focus:ring-teal-500 text-white"></div>
+                    <div class="flex space-x-4">
+                        <select id="r-type" class="w-1/2 bg-gray-700 p-2 rounded-lg border border-gray-600 focus:outline-none focus:ring-2 focus:ring-teal-500 text-white">
+                            <option value="expense" ${r.type === 'expense' ? 'selected' : ''}>Despesa</option>
+                            <option value="income" ${r.type === 'income' ? 'selected' : ''}>Receita</option>
+                        </select>
+                        <select id="r-category" class="w-1/2 bg-gray-700 p-2 rounded-lg border border-gray-600 focus:outline-none focus:ring-2 focus:ring-teal-500 text-white">
+                            ${CATEGORIES.map(c => `<option value="${c.id}" ${r.category === c.id ? 'selected' : ''}>${c.name}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="flex space-x-4">
+                        <input id="r-start-date" type="date" value="${r.startDate || new Date().toISOString().split('T')[0]}" required class="w-1/2 bg-gray-700 p-2 rounded-lg border border-gray-600 focus:outline-none focus:ring-2 focus:ring-teal-500 text-white">
+                        <select id="r-frequency" class="w-1/2 bg-gray-700 p-2 rounded-lg border border-gray-600 focus:outline-none focus:ring-2 focus:ring-teal-500 text-white">
+                            ${FREQUENCIES.map(f => `<option value="${f}" ${r.frequency === f ? 'selected' : ''}>${{weekly:'Semanal',monthly:'Mensal',annually:'Anual'}[f]}</option>`).join('')}
+                        </select>
+                    </div>
+                    <button type="submit" class="w-full bg-teal-500 hover:bg-teal-600 font-bold py-2 rounded-lg transition-colors">${recurringToEdit ? 'Salvar Alterações' : 'Adicionar'}</button>
+                    ${recurringToEdit ? `<button type="button" id="cancel-recurring-edit-btn" class="w-full bg-gray-600 hover:bg-gray-500 font-bold py-2 rounded-lg transition-colors mt-2">Cancelar Edição</button>` : ''}
+                </form>`;
+            const listHtml = `
+                <div id="recurring-list" class="bg-gray-800 rounded-xl p-4 space-y-3">
+                    <h3 class="text-lg font-semibold text-white mb-2">Itens Recorrentes</h3>
+                    ${recurring.length > 0 ? recurring.map(item => `
+                        <div class="flex items-center justify-between p-3 bg-gray-700 rounded-lg">
+                            <div class="flex items-center space-x-4">
+                                <i data-lucide="${getCategory(item.category).icon}" class="text-teal-400"></i>
+                                <div>
+                                    <p class="font-semibold text-white">${escapeHTML(item.description)}</p>
+                                    <p class="text-xs text-gray-400">${new Date(item.startDate).toLocaleDateString('pt-BR',{timeZone:'UTC'})} &bull; ${getCategory(item.category).name} &bull; ${item.frequency}</p>
+                                </div>
+                            </div>
+                            <div class="text-right">
+                                <p class="font-bold ${item.type === 'income' ? 'text-green-400' : 'text-red-400'}">${item.type === 'income' ? '+' : '-'} R$ ${item.amount.toFixed(2)}</p>
+                                <div>
+                                    <button data-id="${item.id}" class="edit-recurring-btn text-xs text-yellow-400 hover:underline mr-2">Editar</button>
+                                    <button data-id="${item.id}" class="delete-recurring-btn text-xs text-red-400 hover:underline">Apagar</button>
+                                </div>
+                            </div>
+                        </div>`).join('') : '<p class="text-gray-400 text-center py-4">Nenhum item cadastrado.</p>'}
+                </div>`;
+            return `
+                <div class="p-4 md:p-6 space-y-6">
+                    <h1 class="text-3xl font-bold text-white">Recorrências</h1>
+                    ${formHtml}
+                    ${listHtml}
+                </div>`;
+        };
+
         const renderBudgetsPage = () => {
             const { budgets } = AppState;
             return `
@@ -496,6 +550,7 @@
                 if (view === 'dashboard') mainContent.innerHTML = renderDashboard();
                 if (view === 'transactions') mainContent.innerHTML = renderTransactionsPage();
                 if (view === 'budgets') mainContent.innerHTML = renderBudgetsPage();
+                if (view === "recurring") mainContent.innerHTML = renderRecurringPage();
                 if (view === 'settings') mainContent.innerHTML = renderSettingsPage();
             }
             lucide.createIcons();
@@ -506,6 +561,9 @@
             if(newView !== 'transactions') {
                 AppState.showTransactionForm = false;
                 AppState.transactionToEdit = null;
+            }
+            if(newView !== 'recurring') {
+                AppState.recurringToEdit = null;
             }
             AppState.view = newView;
             AppState.isSidebarOpen = false;
@@ -648,6 +706,22 @@
                 }
 
                 // Budgets Page
+                // Recurring Page
+                if(target.matches(".edit-recurring-btn")) {
+                    const id = target.dataset.id;
+                    AppState.recurringToEdit = AppState.recurring.find(r => r.id === id);
+                    updateUI();
+                }
+                if(target.matches(".delete-recurring-btn")) {
+                    const id = target.dataset.id;
+                    AppState.recurring = AppState.recurring.filter(r => r.id !== id);
+                    DataProvider.saveData(AppState.user.id, "recurring", AppState.recurring);
+                    updateUI();
+                }
+                if(target.id === "cancel-recurring-edit-btn") {
+                    AppState.recurringToEdit = null;
+                    updateUI();
+                }
                 if(target.matches('.delete-budget-btn')) {
                     const id = target.dataset.id;
                     AppState.budgets = AppState.budgets.filter(b => b.id !== id);
@@ -708,22 +782,27 @@
                 }
 
                 if (form.id === 'recurring-form') {
-                    const frequency = form['r-frequency'].value;
-                    const startDate = form['r-start-date'].value;
-                    if (!FREQUENCIES.includes(frequency)) { alert('Frequ\u00eancia inv\u00e1lida.'); return; }
-                    if (!startDate || isNaN(Date.parse(startDate))) { alert('Data de in\u00edcio inv\u00e1lida.'); return; }
+                    const frequency = form["r-frequency"].value;
+                    const startDate = form["r-start-date"].value;
+                    if (!FREQUENCIES.includes(frequency)) { alert("Frequência inválida."); return; }
+                    if (!startDate || isNaN(Date.parse(startDate))) { alert("Data de início inválida."); return; }
 
                     const recurringItem = {
-                        id: crypto.randomUUID(),
-                        amount: parseFloat(form['r-amount'].value),
-                        description: form['r-description'].value,
-                        category: form['r-category'].value,
-                        type: form['r-type'].value,
+                        id: AppState.recurringToEdit ? AppState.recurringToEdit.id : crypto.randomUUID(),
+                        amount: parseFloat(form["r-amount"].value),
+                        description: form["r-description"].value,
+                        category: form["r-category"].value,
+                        type: form["r-type"].value,
                         startDate,
                         frequency,
                     };
-                    AppState.recurring.push(recurringItem);
+                    if (AppState.recurringToEdit) {
+                        AppState.recurring = AppState.recurring.map(r => r.id === recurringItem.id ? recurringItem : r);
+                    } else {
+                        AppState.recurring.push(recurringItem);
+                    }
                     DataProvider.saveData(AppState.user.id, 'recurring', AppState.recurring);
+                    AppState.recurringToEdit = null;
                     updateUI();
                 }
 
